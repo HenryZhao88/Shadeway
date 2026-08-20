@@ -1,0 +1,66 @@
+# node / web
+node_modules/
+dist/
+build/
+.next/
+out/
+.cache/
+.turbo/
+.parcel-cache/
+coverage/
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+.vite/
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# data + generated artifacts (pipeline outputs live here)
+data/
+artifacts/
+*.geojson
+*.shp
+*.dbf
+*.shx
+*.prj
+*.tif
+*.tiff
+*.las
+*.laz
+*.parquet
+*.duckdb
+*.duckdb.wal
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key

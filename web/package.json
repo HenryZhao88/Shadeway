@@ -1,0 +1,15 @@
+{
+  "name": "@shadeway/web",
+  "version": "0.0.1",
+  "private": true,
+  "description": "shadeway web client (react + deck.gl)",
+  "scripts": {
+    "dev": "echo \"wire up your bundler first (vite/next)\" && exit 1",
+    "build": "echo \"wire up your bundler first\" && exit 1",
+    "lint": "echo \"wire up eslint first\" && exit 1",
+    "test": "echo \"wire up a test runner first\" && exit 1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

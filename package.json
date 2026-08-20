@@ -1,0 +1,21 @@
+{
+  "name": "shadeway",
+  "version": "0.0.1",
+  "private": true,
+  "description": "shadeway monorepo",
+  "workspaces": [
+    "web"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace web run dev",
+    "build:web": "npm --workspace web run build",
+    "lint:web": "npm --workspace web run lint",
+    "test:web": "npm --workspace web run test",
+    "server:test": "python -m pytest server/tests",
+    "pipeline:test": "python -m pytest pipeline/tests",
+    "test": "npm run test:web && npm run server:test && npm run pipeline:test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
