@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+import numpy as np
 import pytest
 
 from shadeway.router import bicriteria
@@ -8,6 +9,21 @@ from shadeway_contracts.fixtures import write_fixture_city
 
 EDT = timezone(timedelta(hours=-4))
 DEPART = datetime(2025, 7, 22, 15, 0, tzinfo=EDT)
+
+
+def _hot_edges(graph, frac: float, seed: int = 7) -> set[int]:
+    """A deterministic scattered hot set.
+
+    A stride (every 2nd / 3rd edge id) does NOT work here: sidewalk sides are
+    stored consecutively per segment, so a stride makes exactly one side of
+    every segment hot and an all-cool path then exists at zero time cost — no
+    tradeoff, one frontier point. Scattering hot segments is what creates real
+    time-vs-heat detours.
+    """
+    n = len(graph.edge_u)
+    rng = np.random.default_rng(seed)
+    chosen = rng.random(n) < frac
+    return set(int(i) for i in np.flatnonzero(chosen))
 
 
 @pytest.fixture(scope="module")
@@ -47,7 +63,7 @@ def test_returns_at_least_one_path(graph):
 
 
 def test_frontier_is_strictly_pareto_optimal(graph):
-    hot = set(range(0, len(graph.edge_u), 3))
+    hot = _hot_edges(graph, 1 / 3)
     paths = bicriteria.search(graph, 0, 25, DEPART, _fake_cost(graph, hot))
     ordered = sorted(paths, key=lambda p: p.duration_s)
     for a, b in zip(ordered, ordered[1:]):
@@ -63,7 +79,7 @@ def test_the_fastest_path_is_also_the_single_objective_optimum(graph):
 
 
 def test_avoiding_hot_edges_costs_time_but_saves_heat(graph):
-    hot = set(range(0, len(graph.edge_u), 2))
+    hot = _hot_edges(graph, 0.5)
     paths = bicriteria.search(graph, 0, 25, DEPART, _fake_cost(graph, hot))
     assert len(paths) >= 2, "a real tradeoff should produce multiple frontier points"
     fastest = min(paths, key=lambda p: p.duration_s)
@@ -73,7 +89,7 @@ def test_avoiding_hot_edges_costs_time_but_saves_heat(graph):
 
 
 def test_epsilon_dominance_reduces_the_label_count(graph):
-    hot = set(range(0, len(graph.edge_u), 2))
+    hot = _hot_edges(graph, 0.5)
     bicriteria.search(
         graph, 0, 30, DEPART, _fake_cost(graph, hot), epsilon_dm=5.0, collect_stats=True
     )
@@ -87,7 +103,7 @@ def test_epsilon_dominance_reduces_the_label_count(graph):
 
 
 def test_label_cap_is_respected(graph):
-    hot = set(range(0, len(graph.edge_u), 2))
+    hot = _hot_edges(graph, 0.5)
     bicriteria.search(
         graph, 0, 30, DEPART, _fake_cost(graph, hot), max_labels_per_node=4,
         collect_stats=True,
