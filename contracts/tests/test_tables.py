@@ -1,6 +1,5 @@
 import pyarrow as pa
 import pytest
-
 from shadeway_contracts.tables import (
     ALL_TABLES,
     CRS_EPSG,

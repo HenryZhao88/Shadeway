@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-
 from shadeway_contracts.api import (
     DepartureCurveResponse,
     DeparturePoint,

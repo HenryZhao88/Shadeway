@@ -1,6 +1,5 @@
 import pytest
 from fastapi.testclient import TestClient
-
 from shadeway.stub_api import app
 from shadeway_contracts.api import (
     DepartureCurveResponse,

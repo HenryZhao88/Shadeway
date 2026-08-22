@@ -1,7 +1,7 @@
 import numpy as np
 import pyarrow.parquet as pq
 import pytest
-
+from shadeway_contracts.fixtures import build_fixture_city, write_fixture_city
 from shadeway_contracts.tables import (
     ALL_TABLES,
     EdgeKind,
@@ -9,7 +9,6 @@ from shadeway_contracts.tables import (
     read_table,
     validate_table,
 )
-from shadeway_contracts.fixtures import build_fixture_city, write_fixture_city
 
 
 @pytest.fixture(scope="module")
