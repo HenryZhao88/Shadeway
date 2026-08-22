@@ -14,6 +14,7 @@ install: venv
 	npm install
 
 test:
+	$(PY) -m shadeway_contracts.export_ts --out web/src/api/types.ts --check
 	$(PY) -m pytest contracts/tests server/tests pipeline/tests -q --import-mode=importlib
 	npm --workspace web run test -- --run
 
