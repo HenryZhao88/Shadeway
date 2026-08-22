@@ -60,16 +60,58 @@ def is_shaded_by_building(
     return building_horizon_deg(scene, x, y, azimuth_deg) > elevation_deg
 
 
+def _geoms_array(scene: Scene) -> np.ndarray:
+    """Building geometries as a numpy object array, cached on the scene."""
+    arr = getattr(scene, "_geoms_array", None)
+    if arr is None:
+        arr = np.array(scene.building_geoms, dtype=object)
+        scene._geoms_array = arr  # noqa: SLF001 — deliberate cache slot
+    return arr
+
+
 def building_horizon_profile(
     scene: Scene, x: float, y: float, bins: int = AZIMUTH_BINS
 ) -> np.ndarray:
-    """72 rays, one per 5 degrees. ~3 ms. This is the expensive call, and it is
-    the ONLY expensive call — everything afterwards is an array lookup."""
-    out = np.zeros(bins, dtype=np.uint8)
-    for i in range(bins):
-        angle = building_horizon_deg(scene, x, y, i * (360.0 / bins))
-        out[i] = np.uint8(np.clip(round(angle), 0, 90))
-    return out
+    """72 rays, one per 5 degrees. Vectorised: one STRtree query for all rays,
+    then bulk intersection/distance. This is the expensive call, and it is the
+    ONLY expensive call — everything afterwards is an array lookup."""
+    angles = np.arange(bins) * (360.0 / bins)
+    radians = np.radians(angles)
+    xs = x + RAY_CAP_M * np.sin(radians)
+    ys = y + RAY_CAP_M * np.cos(radians)
+    rays = shapely.linestrings(
+        np.column_stack([np.full(bins, x), np.full(bins, y), xs, ys]).reshape(
+            bins, 2, 2
+        )
+    )
+    hits = scene.building_tree.query(rays)  # (2, k): ray index, geom index
+    if hits.size == 0:
+        return np.zeros(bins, dtype=np.uint8)
+
+    ray_idx, geom_idx = hits
+    crossings = shapely.intersection(rays[ray_idx], _geoms_array(scene)[geom_idx])
+    nonempty = ~shapely.is_empty(crossings)
+    if not nonempty.any():
+        return np.zeros(bins, dtype=np.uint8)
+    ray_idx, crossings = ray_idx[nonempty], crossings[nonempty]
+    geom_idx = geom_idx[nonempty]
+
+    origin = shapely.points(np.full(len(crossings), x), np.full(len(crossings), y))
+    distance = np.asarray(shapely.distance(origin, crossings))
+    tops = (
+        scene.building_bases_m[geom_idx] + scene.building_heights_m[geom_idx]
+    ).astype(np.float64)
+    inside = distance <= 0.01  # we are inside the footprint: blocked fully
+    with np.errstate(divide="ignore", invalid="ignore"):
+        angle = np.where(
+            inside,
+            90.0,
+            np.degrees(np.arctan((tops - EYE_HEIGHT_M) / np.where(inside, 1.0, distance))),
+        )
+
+    best = np.zeros(bins, dtype=np.float64)
+    np.maximum.at(best, ray_idx, angle)
+    return np.clip(np.rint(best), 0, 90).astype(np.uint8)
 
 
 # ------------------------------------------------------------------ canopy
@@ -166,6 +208,34 @@ def f_sun(
     return canopy_transmittance(scene, x, y, azimuth_deg, elevation_deg)
 
 
+def _crown_geometry_all_bins(scene: Scene, x: float, y: float, bins: int = AZIMUTH_BINS):
+    """(ids, along[N, bins], lateral[N, bins]) for every tree within reach of
+    any of the bin rays — one KD query, one vectorised rotation."""
+    index = _tree_kdtree(scene)
+    if index is None:
+        return np.zeros(0, dtype=np.int64), np.zeros((0, bins)), np.zeros((0, bins))
+
+    reach = RAY_CAP_M + float(scene.tree_radius_m.max())
+    candidate_ids = index.query_ball_point([x, y], reach)
+    if not candidate_ids:
+        return np.zeros(0, dtype=np.int64), np.zeros((0, bins)), np.zeros((0, bins))
+
+    ids = np.asarray(sorted(candidate_ids), dtype=np.int64)
+    tx = scene.tree_xy[ids, 0] - x
+    ty = scene.tree_xy[ids, 1] - y
+    angles = np.radians(np.arange(bins) * (360.0 / bins))
+    sin_a = np.sin(angles)[None, :]
+    cos_a = np.cos(angles)[None, :]
+    along = tx[:, None] * sin_a + ty[:, None] * cos_a            # (N, bins)
+    lateral = np.abs(tx[:, None] * cos_a - ty[:, None] * sin_a)  # (N, bins)
+    in_view = (
+        (lateral <= scene.tree_radius_m[ids][:, None])
+        & (along > 0.0)
+        & (along <= RAY_CAP_M)
+    )
+    return ids, along, np.where(in_view, lateral, np.inf)
+
+
 def canopy_horizon_profile(
     scene: Scene, x: float, y: float, bins: int = AZIMUTH_BINS
 ) -> np.ndarray:
@@ -177,14 +247,39 @@ def canopy_horizon_profile(
     atan((crown_top - eye)/d). One vectorised pass over nearby crowns.
     """
     out = np.zeros(bins, dtype=np.uint8)
-    if len(scene.tree_xy) == 0:
+    ids, along, _ = _crown_geometry_all_bins(scene, x, y, bins)
+    if not len(ids):
         return out
-    for i in range(bins):
-        ids, along, _ = _crown_geometry(scene, x, y, i * (360.0 / bins))
-        if not len(ids):
-            continue
-        highest_tan = (scene.crown_top_m[ids] - EYE_HEIGHT_M) / along
-        out[i] = np.uint8(
-            np.clip(round(float(np.degrees(np.arctan(highest_tan.max())))), 0, 90)
-        )
-    return out
+    highest_tan = (scene.crown_top_m[ids][:, None] - EYE_HEIGHT_M) / np.maximum(
+        along, 0.01
+    )
+    best = np.degrees(np.arctan(highest_tan.max(axis=0)))
+    return np.clip(np.rint(best), 0, 90).astype(np.uint8)
+
+
+def tau_profile(
+    scene: Scene, x: float, y: float, elevation_deg: float = 30.0,
+    bins: int = AZIMUTH_BINS,
+) -> np.ndarray:
+    """Tau product per azimuth bin at a given beam elevation.
+
+    Approximation, deliberate: tau depends only on WHICH crowns the beam
+    crosses, and for a given azimuth that set barely changes with elevation
+    once inside the crown's height band; the height band itself is carried by
+    the canopy horizon layer. Noted in docs/model.md.
+    """
+    ones = np.ones(bins, dtype=np.float32)
+    if len(scene.tree_xy) == 0 or elevation_deg <= 0.0:
+        return ones
+    ids, along, lateral = _crown_geometry_all_bins(scene, x, y, bins)
+    if not len(ids):
+        return ones
+    ray_height = EYE_HEIGHT_M + along * np.tan(np.radians(elevation_deg))
+    in_band = (
+        (scene.crown_base_m[ids][:, None] <= ray_height)
+        & (ray_height <= scene.crown_top_m[ids][:, None])
+    )
+    hit = in_band & np.isfinite(lateral)
+    log_tau = np.where(hit, np.log(np.maximum(scene.tau[ids][:, None], 1e-6)), 0.0)
+    with np.errstate(divide="ignore"):
+        return np.exp(log_tau.sum(axis=0)).astype(np.float32).clip(0.0, 1.0)
