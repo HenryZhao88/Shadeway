@@ -24,16 +24,14 @@ WIDTH_SEARCH_M = 12.0  # how far to look for a planimetric sidewalk to measure
 def offset_side(line: LineString, side: Side, distance_m: float) -> LineString:
     """Offset `line` to one side, KEEPING the original direction of travel.
 
-    shapely's `parallel_offset(..., 'right')` returns the result reversed. If you
-    don't undo that, half your edges run backwards and every bearing, every
-    instruction and every sample ordering is wrong. This is the single most
-    common bug in this module.
+    HISTORICAL NOTE: shapely < 2 returned right-side offsets reversed, and every
+    older write-up (including our own plan) tells you to undo the reversal.
+    Shapely >= 2 does NOT reverse — the coords come back in travel order, as
+    verified live. Reversing again would break it: half the edges would run
+    backwards and every bearing, instruction and sample ordering would be wrong.
     """
-    if side == Side.LEFT:
-        offset = line.parallel_offset(distance_m, "left", join_style=2)
-    else:
-        offset = line.parallel_offset(distance_m, "right", join_style=2)
-        offset = LineString(list(offset.coords)[::-1])
+    offset = line.parallel_offset(distance_m, "left" if side == Side.LEFT else "right",
+                                  join_style=2)
     if offset.is_empty or offset.geom_type != "LineString":
         # degenerate offset (self-intersecting hairpin); fall back to the centerline
         return line
