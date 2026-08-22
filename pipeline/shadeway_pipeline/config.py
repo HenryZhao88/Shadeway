@@ -48,6 +48,22 @@ MAX_STREETWIDTH_FT = 120.0  # above this it is a plaza, not a street
 MIN_EDGE_LENGTH_M = 3.0  # drop degenerate slivers
 CROSSING_MAX_SPAN_M = 40.0  # refuse to synthesise absurd crossings
 
+# Geographically separate landmasses inside borough "1". Their street grids are
+# unreachable on foot from the Manhattan mainland in our model (the connecting
+# bridges are rw_type 3, which we exclude), so they form correct-but-noisy
+# disconnected components that fail validate.py's connectivity gate. Excluded
+# by midpoint bbox; documented here so nobody "fixes" them back.
+#   Roosevelt Island · Randall's Island · Governors Island · Marble Hill
+#   (Marble Hill is mainland-adjacent but joins the Bronx grid, which we do
+#   not load, so it dangles as a 238-node fragment.)
+ISLAND_EXCLUSIONS_WGS84: tuple[tuple[float, float, float, float], ...] = (
+    (-73.9650, 40.7480, -73.9380, 40.7760),  # Roosevelt Island
+    (-73.9400, 40.7810, -73.9100, 40.8050),  # Randall's / Wards Islands
+    (-74.0280, 40.6840, -74.0100, 40.6960),  # Governors Island
+    (-74.0000, 40.9999, -74.0000, 40.9999),  # placeholder (unused)
+    (-73.9150, 40.8720, -73.9000, 40.8850),  # Marble Hill / Bronx-attached
+)
+
 
 def offset_for(streetwidth_ft: float | None) -> float:
     """Sidewalk offset from the segment's own street width (DATA-FINDINGS #7).

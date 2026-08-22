@@ -93,10 +93,17 @@ def build_sidewalk_edges(streets, sidewalk_hint=None):
             width_m = widths.iloc[row_idx]
             width_ft = width_m / 0.3048 if pd.notna(width_m) else None
         offset_m = offset_for(width_ft)
+        side_geoms: list[tuple[Side, LineString]] = []
         for side in (Side.LEFT, Side.RIGHT):
             geom = offset_side(line, side, offset_m)
             if geom.length < MIN_EDGE_LENGTH_M:
                 continue
+            side_geoms.append((side, geom))
+        if len(side_geoms) != 2:
+            # a street with only one usable side is worse than no street:
+            # per-side guidance is the product, so emit both sides or neither
+            continue
+        for side, geom in side_geoms:
             (ax, ay), (bx, by) = geom.coords[0], geom.coords[-1]
             rows.append(
                 {

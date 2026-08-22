@@ -6,9 +6,16 @@ from __future__ import annotations
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 
-from shadeway_pipeline.config import CACHE_DIR, FEET_TO_M, TARGET_CRS, Scope
+from shadeway_pipeline.config import (
+    CACHE_DIR,
+    FEET_TO_M,
+    ISLAND_EXCLUSIONS_WGS84,
+    TARGET_CRS,
+    Scope,
+)
 from shadeway_pipeline.sources.fetch import socrata_geojson
 from shadeway_pipeline.sources.resolve import load_datasets
 
@@ -28,6 +35,13 @@ def _download(scope: Scope) -> Path:
     return socrata_geojson(load_datasets()["street_centerline"], where=where)
 
 
+def _in_excluded_island(lon: float, lat: float) -> bool:
+    return any(
+        w <= lon <= e and s <= lat <= n
+        for w, s, e, n in ISLAND_EXCLUSIONS_WGS84
+    )
+
+
 def load(scope: Scope) -> gpd.GeoDataFrame:
     frame = gpd.read_file(_download(scope))
     if "rw_type" in frame.columns:
@@ -35,6 +49,12 @@ def load(scope: Scope) -> gpd.GeoDataFrame:
     frame = frame[frame["boroughcode"].astype(str).isin(scope.boroughs)]
     # geometry arrives as MultiLineString — explode before anything else
     frame = frame.explode(index_parts=False)
+    # drop geographically separate landmasses (see ISLAND_EXCLUSIONS_WGS84)
+    mids = frame.geometry.interpolate(0.5, normalized=True)
+    keep_mask = ~np.array(
+        [_in_excluded_island(p.x, p.y) for p in mids]
+    )
+    frame = frame[keep_mask]
     frame = gpd.GeoDataFrame(frame, geometry="geometry").to_crs(TARGET_CRS)
 
     if "streetwidth" in frame.columns:

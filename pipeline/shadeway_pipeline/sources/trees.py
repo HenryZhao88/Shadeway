@@ -34,13 +34,9 @@ def _download(scope: Scope) -> Path:
 
 
 def load(scope: Scope) -> gpd.GeoDataFrame:
-    frame = pd.read_json(_download(scope), lines=False)
-    features = frame["features"] if "features" in frame.columns else None
-    if features is not None:
-        props = pd.DataFrame([f["properties"] for f in features])
-    else:
-        props = frame
-
+    # gpd.read_file parses the FeatureCollection (geometry is null everywhere —
+    # we ignore it) and hands back the property columns
+    props = gpd.read_file(_download(scope))
     lon = pd.to_numeric(props["longitude"], errors="coerce")
     lat = pd.to_numeric(props["latitude"], errors="coerce")
     points = gpd.GeoDataFrame(

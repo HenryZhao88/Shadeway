@@ -3,7 +3,7 @@ PIP := uv pip install --python .venv/bin/python
 DATA ?= data
 SCOPE ?= manhattan
 
-.PHONY: venv install test lint fixtures types data warm serve stub dev clean
+.PHONY: venv install test lint fixtures types validate data warm serve stub dev clean
 
 venv:
 	uv venv --python 3.11 --allow-existing .venv
@@ -30,6 +30,9 @@ fixtures:
 
 data:
 	$(PY) -m shadeway_pipeline.emit --out $(DATA)/nyc --scope $(SCOPE)
+
+validate:
+	$(PY) -m shadeway_pipeline.validate --data $(DATA)/nyc
 
 warm:
 	$(PY) -m shadeway.warm --data $(DATA)/nyc
