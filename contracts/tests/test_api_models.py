@@ -1,8 +1,8 @@
 import json
+from itertools import pairwise
 
 import pytest
 from pydantic import ValidationError
-
 from shadeway_contracts.api import (
     PRESET_PROFILES,
     LatLon,
@@ -68,6 +68,6 @@ def test_frontier_is_sorted_by_duration_and_strictly_pareto():
     resp = example_route_response()
     pts = resp.frontier
     assert pts == sorted(pts, key=lambda p: p.duration_s)
-    for a, b in zip(pts, pts[1:]):
+    for a, b in pairwise(pts):
         assert b.duration_s > a.duration_s
         assert b.mean_feels_like_c < a.mean_feels_like_c

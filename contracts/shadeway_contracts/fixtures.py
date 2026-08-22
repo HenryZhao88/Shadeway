@@ -25,11 +25,11 @@ from shadeway_contracts.tables import (
     CRS_EPSG,
     EDGES,
     NODES,
+    SAMPLE_SPACING_M,
     SAMPLES,
     TREES,
     AmenityKind,
     EdgeKind,
-    SAMPLE_SPACING_M,
     Side,
 )
 
@@ -160,7 +160,7 @@ def build_fixture_city(seed: int = 7) -> dict[str, pa.Table]:
     samples = pa.Table.from_pylist(sample_rows, schema=SAMPLES)
 
     # one tall building per block interior, plus a very tall one for a hard shadow
-    bx, by, bh, bid = [], [], [], []
+    bh, bid = [], []
     polys = []
     for i in range(GRID - 1):
         for j in range(GRID - 1):
