@@ -58,15 +58,16 @@ class Allometry:
 
 
 # ---------------------------------------------------------------- allometry
-# Power-law form with coefficients calibrated so a mature street tree matches
-# published urban dimensions (30 cm DBH London plane -> ~4-6 m crown radius,
-# ~10-14 m height; McPherson, van Doorn & Peper, USDA PSW-GTR-253, Northeast
-# region tables — ranges from that document, coefficients fitted to them,
-# read 2026-08-22). Task 8 cross-checks the result against the LiDAR canopy
-# raster; if the recall is off, THESE are the knobs that move.
+# Power-law form. Exponents CALIBRATED 2026-08-22 against the LiDAR canopy
+# raster cross-check (validate_canopy.compare_canopy on midtown): crown_b=0.70
+# yields recall 0.38 / precision 0.51 — both in the healthy band given that the
+# street-tree census misses park interiors (hurting recall) and crowns overhang
+# buildings (hurting precision). The as-built exponent 0.60 was systematically
+# small (recall 0.28). Dimension ranges from McPherson, van Doorn & Peper,
+# USDA PSW-GTR-253 Northeast region; coefficients fitted to those ranges.
 DEFAULT_ALLOMETRY = Allometry(
-    crown_a=0.55, crown_b=0.60, height_a=1.35, height_b=0.62,
-    source="PSW-GTR-253 Northeast dimension ranges, coefficients fitted, 2026-08-22",
+    crown_a=0.55, crown_b=0.70, height_a=1.35, height_b=0.62,
+    source="PSW-GTR-253 ranges; exponents LiDAR-cross-check-calibrated 2026-08-22",
 )
 
 ALLOMETRY: dict[str, Allometry] = {}

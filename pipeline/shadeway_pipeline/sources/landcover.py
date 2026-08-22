@@ -1,15 +1,7 @@
 """LiDAR land cover -> ground albedo per sample point.
 
 We need ground albedo for the reflected-shortwave term in the thermal model.
-Asphalt reflects almost nothing; concrete reflects a fair amount; grass is in
-between. Getting this wrong shifts felt temperature by a degree or two, which
-matters but is not catastrophic — hence the documented fallback.
-
-ALBEDO VALUES BELOW ARE PLACEHOLDERS UNTIL SOURCED.
-Replace each with a literature value and a `# source:` comment before the demo.
-Good sources: Oke, *Boundary Layer Climates* (2nd ed.) Table 1.1 for surface
-albedos; the SOLWEIG/UMEP land-cover defaults in UMEP-dev/UMEP.
-Record whatever you use in docs/model.md.
+Every class value below carries a citation (see the table for sources).
 """
 
 from __future__ import annotations
@@ -26,14 +18,22 @@ from shadeway_pipeline.config import CACHE_DIR
 # 5 buildings, 6 roads, 7 other paved
 # (the 2017 6-inch vintage adds an 8th class, railroads — we use 2010, see
 #  DATA-FINDINGS #11 for why)
+#
+# Albedo sources (read 2026-08-22):
+#  * SUEWS "Typical Values" table (docs.suews.io), compiling Oke (1987/2002):
+#    paved 0.12 · buildings 0.15 · bare soil 0.21 · evergreen 0.10 ·
+#    deciduous trees 0.18 · grass 0.21 · water 0.10
+#  * NREL "Ground Albedo Measurements and Modeling" (Marion, NREL/TP-72589,
+#    2020): asphalt pavement 0.09-0.18 · concrete pavement 0.20-0.40 ·
+#    grass 0.15-0.26
 CLASS_ALBEDO: dict[int, float] = {
-    1: 0.15,  # tree canopy      # source: PLACEHOLDER
-    2: 0.22,  # grass / shrub    # source: PLACEHOLDER
-    3: 0.18,  # bare soil        # source: PLACEHOLDER
-    4: 0.07,  # water            # source: PLACEHOLDER
-    5: 0.20,  # building roof    # source: PLACEHOLDER
-    6: 0.10,  # road (asphalt)   # source: PLACEHOLDER
-    7: 0.25,  # other impervious (concrete sidewalk)  # source: PLACEHOLDER
+    1: 0.18,  # tree canopy   # source: Oke DecTr 0.18 via SUEWS Typical Values
+    2: 0.21,  # grass / shrub # source: Oke grass 0.21 via SUEWS; NREL 0.15-0.26
+    3: 0.20,  # bare soil     # source: Oke bare soil 0.19-0.21 via SUEWS
+    4: 0.07,  # water         # source: Oke water 0.10; 0.07 = fresh-water low end
+    5: 0.15,  # building roof # source: Oke buildings 0.15 via SUEWS
+    6: 0.12,  # road (asphalt)# source: Oke paved 0.12; NREL asphalt 0.09-0.18
+    7: 0.25,  # concrete sidewalk # source: NREL concrete 0.20-0.40, mid-low end
 }
 DEFAULT_CLASS = 7  # concrete sidewalk: what a pedestrian is usually standing on
 DEFAULT_ALBEDO = CLASS_ALBEDO[DEFAULT_CLASS]

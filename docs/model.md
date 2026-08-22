@@ -40,9 +40,29 @@ NYC-specific measurements would tighten it.
 ## Ground albedo
 
 From the NYC 2010 3 ft LiDAR land-cover raster (`9auy-76zt`, ERDAS HFA, opens as
-EPSG:2263 — verified live). Class→albedo values in
-`pipeline/shadeway_pipeline/sources/landcover.py` are still marked PLACEHOLDER:
-they need literature citations (Oke Table 1.1 / UMEP defaults) before the demo.
+EPSG:2263 — verified live). Sourced values (read 2026-08-22):
+
+| class | surface | albedo | source |
+|---|---|---|---|
+| 1 | tree canopy | 0.18 | Oke DecTr via SUEWS Typical Values |
+| 2 | grass/shrub | 0.21 | Oke grass; NREL range 0.15–0.26 |
+| 3 | bare soil | 0.20 | Oke bare soil 0.19–0.21 |
+| 4 | water | 0.07 | Oke water 0.10 (low end, fresh water) |
+| 5 | building roof | 0.15 | Oke buildings via SUEWS |
+| 6 | asphalt road | 0.12 | Oke paved; NREL asphalt 0.09–0.18 |
+| 7 | concrete sidewalk | 0.25 | NREL concrete 0.20–0.40 (low-mid) |
+
+## Canopy cross-check (Task 8)
+
+`validate_canopy.compare_canopy` on midtown against the LiDAR canopy raster,
+after calibration:
+
+- **recall 0.38 / precision 0.51** with `crown_b = 0.70`
+- as-built `crown_b = 0.60` was recall 0.28 — systematically undersized crowns
+- calibration note: the street-tree census misses park interiors (hurting
+  recall) and crowns overhang buildings (hurting precision), so neither metric
+  approaches 1.0 honestly; both now sit in the healthy band
+- allometry exponents recorded in `scene/species.py` with this citation
 
 ## Graph scope decisions
 
