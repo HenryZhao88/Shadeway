@@ -58,10 +58,18 @@ class AppState:
             data_dir = Path("data/fixtures")
         graph = Graph.load(data_dir)
         scene = Scene.load(data_dir)
+        horizon = HorizonCache(scene, graph.sample_xy)
+        precomputed = data_dir / "horizon.npz"
+        if precomputed.exists():
+            if horizon.load_precomputed(precomputed):
+                print(f"loaded warm horizon cache from {precomputed}")
+            else:
+                print(f"horizon cache at {precomputed} did not match the scene; "
+                      "serving cold (slow until warmed)")
         return cls(
             graph=graph,
             scene=scene,
-            horizon=HorizonCache(scene, graph.sample_xy),
+            horizon=horizon,
             weather=WeatherClient(),
             data_dir=data_dir,
         )

@@ -75,19 +75,25 @@ def main() -> None:
     parser.add_argument("--out", type=Path, default=None,
                         help="optional .npz to save the warmed cache to")
     parser.add_argument("--workers", type=int, default=None)
+    parser.add_argument("--limit", type=int, default=None,
+                        help="warm only the first N samples (for testing)")
     args = parser.parse_args()
 
     from shadeway.router.graph import Graph
 
     started = time.time()
     graph = Graph.load(args.data)
-    nbytes = graph.n_samples * AZIMUTH_BINS * 2
+    sample_xy = graph.sample_xy
+    if args.limit:
+        sample_xy = sample_xy[: args.limit]
+    nbytes = len(sample_xy) * AZIMUTH_BINS * 2
     print(
-        f"{graph.n_samples} samples, {nbytes / 1e6:.0f} MB of uint8, "
+        f"{len(sample_xy)} of {graph.n_samples} samples, "
+        f"{nbytes / 1e6:.0f} MB of uint8, "
         f"workers={args.workers or max(1, cpu_count() - 1)}"
     )
     store, canopy_tau = warm_parallel(
-        args.data, graph.sample_xy, workers=args.workers
+        args.data, sample_xy, workers=args.workers
     )
     elapsed = time.time() - started
     print(

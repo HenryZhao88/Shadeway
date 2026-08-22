@@ -35,6 +35,27 @@ class HorizonCache:
     def nbytes(self) -> int:
         return int(self.store.nbytes)
 
+    def load_precomputed(self, path) -> bool:
+        """Load a build-time warmed cache (`shadeway.warm --out`). Returns True
+        on success. Store is mmapped read-only; tau and warm flags come along.
+        Missing or shape-mismatched files are ignored, not fatal."""
+        import numpy as np
+
+        try:
+            data = np.load(path, mmap_mode="r")
+            store = data["store"]
+            tau = data["tau"]
+        except Exception:
+            return False
+        if store.shape != self.store.shape or tau.shape != self.canopy_tau.shape:
+            return False
+        # copy into writable RAM: Vercel bundles are read-only but small enough
+        # (75 MB for Manhattan); local runs can mmap later if memory matters
+        self.store[:] = store
+        self.canopy_tau[:] = tau
+        self.warm[:] = True
+        return True
+
     def ensure(self, sample_ids: np.ndarray) -> None:
         ids = np.asarray(sample_ids, dtype=np.int64)
         cold = ids[~self.warm[ids]]
@@ -50,19 +71,8 @@ class HorizonCache:
             self.warm[sample_id] = True
 
     def _tau_profile(self, x: float, y: float) -> np.ndarray:
-        """Tau product per azimuth bin, evaluated at a mid elevation.
-
-        Approximation, and a deliberate one: tau depends only on WHICH crowns the
-        beam crosses, and for a given azimuth that set barely changes with
-        elevation once the beam is inside the crown's height band. The height
-        band itself is handled by LAYER_CANOPY. Noted in docs/model.md.
-        """
-        out = np.ones(AZIMUTH_BINS, dtype=np.float32)
-        for i in range(AZIMUTH_BINS):
-            out[i] = occluder.canopy_transmittance(
-                self.scene, x, y, i * BIN_WIDTH_DEG, 30.0
-            )
-        return out
+        """Tau product per azimuth bin, evaluated at a mid elevation."""
+        return occluder.tau_profile(self.scene, x, y, 30.0, AZIMUTH_BINS)
 
     def _bin_lerp(self, layer: int, ids: np.ndarray, azimuth_deg: float):
         position = (azimuth_deg % 360.0) / BIN_WIDTH_DEG
