@@ -1,0 +1,61 @@
+{
+  "source": "generated with pythermalcomfort models.utci (transcription of the utci.org reference polynomial), read 2026-08-22",
+  "cases": [
+    {
+      "air_temp_c": 0,
+      "tmrt_c": 0,
+      "wind_10m_ms": 0.5,
+      "rh_pct": 50,
+      "utci_c": 0.7
+    },
+    {
+      "air_temp_c": 30,
+      "tmrt_c": 60,
+      "wind_10m_ms": 1.0,
+      "rh_pct": 50,
+      "utci_c": 38.0
+    },
+    {
+      "air_temp_c": 25,
+      "tmrt_c": 25,
+      "wind_10m_ms": 1.0,
+      "rh_pct": 50,
+      "utci_c": 24.6
+    },
+    {
+      "air_temp_c": 32,
+      "tmrt_c": 55,
+      "wind_10m_ms": 5.0,
+      "rh_pct": 45,
+      "utci_c": 34.7
+    },
+    {
+      "air_temp_c": 35.5,
+      "tmrt_c": 41.4,
+      "wind_10m_ms": 3.5,
+      "rh_pct": 60,
+      "utci_c": 38.4
+    },
+    {
+      "air_temp_c": 30.6,
+      "tmrt_c": 62.0,
+      "wind_10m_ms": 2.0,
+      "rh_pct": 48,
+      "utci_c": 38.0
+    },
+    {
+      "air_temp_c": 30.6,
+      "tmrt_c": 34.0,
+      "wind_10m_ms": 2.0,
+      "rh_pct": 48,
+      "utci_c": 31.1
+    },
+    {
+      "air_temp_c": -10,
+      "tmrt_c": -15,
+      "wind_10m_ms": 8.0,
+      "rh_pct": 70,
+      "utci_c": -36.8
+    }
+  ]
+}
