@@ -38,12 +38,18 @@ def _fake_cost(graph, hot_edges: set[int]):
 
     This is the point of the callback design — the router can be tested with a
     made-up cost model and no scene, no weather and no sun.
+
+    Hot edges are 100 vs 30 on purpose: on this uniform grid every monotone
+    path between two nodes has the SAME length, and the smallest possible
+    detour (around one block) triples the distance. Hot must hurt more than
+    3x cool or detouring never pays and the pareto frontier collapses to a
+    single point.
     """
     from shadeway.cost import EdgeCost
 
     def traverse(edge_id: int, enter_at):
         duration = float(graph.edge_length_m[edge_id]) / 1.35
-        feels = 45.0 if edge_id in hot_edges else 30.0
+        feels = 100.0 if edge_id in hot_edges else 30.0
         return EdgeCost(
             duration_s=duration,
             heat_degree_minutes=feels * duration / 60.0,

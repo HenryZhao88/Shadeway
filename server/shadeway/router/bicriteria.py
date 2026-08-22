@@ -91,13 +91,14 @@ def search(
             bucket = (candidate[0], round(candidate[1] / epsilon_dm) * epsilon_dm)
 
             existing = frontier.setdefault(nxt, [])
-            if any(_dominates((t, round(h / epsilon_dm) * epsilon_dm), bucket)
+            rounded_existing = {(t, round(h / epsilon_dm)) for t, h in existing}
+            if (candidate[0], round(candidate[1] / epsilon_dm)) in rounded_existing:
+                continue  # exact duplicate (same time, same heat bucket)
+            bucket = (candidate[0], round(candidate[1] / epsilon_dm) * epsilon_dm)
+            if any(_dominates(
+                    (t, round(h / epsilon_dm) * epsilon_dm), bucket)
                    for t, h in existing):
                 continue
-            existing[:] = [
-                (t, h) for t, h in existing
-                if not _dominates(bucket, (t, round(h / epsilon_dm) * epsilon_dm))
-            ]
             existing.append(candidate)
             if len(existing) > max_labels_per_node:
                 existing.sort()
