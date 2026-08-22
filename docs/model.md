@@ -1,5 +1,27 @@
 # Model notes
 
+## Tmrt model constants
+
+| Constant | Value | Source | Confidence |
+|---|---|---|---|
+| Stefan–Boltzmann σ | 5.670374419e-8 W m⁻² K⁻⁴ | CODATA 2018 | exact |
+| Human shortwave absorptivity a_k | 0.70 | ISO 7726 via UMEP SOLWEIG (`absK=0.7`) | high |
+| Human longwave emissivity ε_p | 0.97 | ISO 7726 via UMEP SOLWEIG (`absL=0.97`) | high |
+| Angular weights (up/down/4 sides) | 0.06 / 0.06 / 0.22×4 (sum 1.00) | UMEP SOLWEIG standing defaults, ISO 7726 / VDI 3787 | high |
+| Cylinder direct-beam factor Fcyl | 0.28 | UMEP SOLWEIG standing default | high |
+| Sky emissivity formula | Prata 1996: ε=1−(1+ξ)exp(−(1.2+3ξ)^½), ξ=46.5·e₀/T₀ | Prata 1996 QJRMS 122:1103 | high |
+| Cloud correction | linear blend clear→1 by cloud fraction | documented approximation (SOLWEIG needs an observed cloud-index series) | medium |
+| Sunlit surface temperature bump | +18 °C at full insolation | inside design-doc range +10..+20 | approximate |
+| Shaded surface temperature bump | +2 °C scaled by Ig/900 | inside design-doc range +0..+3 | approximate |
+| Wall albedo (default) | 0.20 | UMEP SOLWEIG `albedo_b` example default | medium |
+
+Model shape: UMEP SOLWEIG cylinder formulation — `Sstr = absK·(K_cyl·Fcyl +
+Σfaces) + absL·(ΣL faces)`, `Tmrt = (Sstr/(absL·σ))^¼ − 273.15`. Each face's
+view splits between sky (cold, ε_sky) and obstructions (warm, ≈ surface
+temperature); in a canyon the upward face sees overhanging walls, not sky.
+Surface-temperature bumps are the least-sourced constants; they shift Tmrt by
+~1–2 °C between their plausible bounds and are flagged as approximate.
+
 ## Performance (the Day-1 Spike)
 
 Measured 2026-08-22, bicriteria label-setting search (`shadeway.router.bicriteria`)
