@@ -67,10 +67,30 @@ def _sample_line(line: LineString) -> np.ndarray:
 
 def build_fixture_city(seed: int = 7) -> dict[str, pa.Table]:
     rng = np.random.default_rng(seed)
-    xs, ys = _grid_nodes()
+    # `gx`/`gy` are the CENTRELINE intersections — used for block geometry and
+    # amenity placement. The routable nodes are the corners, two per
+    # intersection, below.
+    gx, gy = _grid_nodes()
 
-    def nid(i: int, j: int) -> int:
+    def gidx(i: int, j: int) -> int:
         return i * GRID + j
+
+    # Two nodes per intersection, one per side of the street.
+    #
+    # This is what makes the fixture topologically honest. The earlier version
+    # gave each intersection a single node, so both sidewalks of a street shared
+    # endpoints: a router could change sides for free at every corner, the
+    # crossing edge was a `u == v` self-loop that no path could ever use, and the
+    # flagship side-of-street mechanic was exercised only against real NYC data.
+    # With a node per side, crossing genuinely costs a crossing.
+    def nid(i: int, j: int, side: Side) -> int:
+        return gidx(i, j) * 2 + (0 if side == Side.LEFT else 1)
+
+    corner = SIDEWALK_OFFSET_M
+    xs = np.empty(len(gx) * 2, dtype=np.float64)
+    ys = np.empty(len(gy) * 2, dtype=np.float64)
+    xs[0::2], ys[0::2] = gx - corner, gy + corner  # Side.LEFT
+    xs[1::2], ys[1::2] = gx + corner, gy - corner  # Side.RIGHT
 
     nodes_lon, nodes_lat = _to_ll.transform(xs, ys)
     nodes = pa.table(
@@ -135,24 +155,27 @@ def build_fixture_city(seed: int = 7) -> dict[str, pa.Table]:
                 if ni >= GRID or nj >= GRID:
                     continue
                 centre = LineString(
-                    [(xs[nid(i, j)], ys[nid(i, j)]), (xs[nid(ni, nj)], ys[nid(ni, nj)])]
+                    [
+                        (gx[gidx(i, j)], gy[gidx(i, j)]),
+                        (gx[gidx(ni, nj)], gy[gidx(ni, nj)]),
+                    ]
                 )
                 physical_id += 1
                 for side in (Side.LEFT, Side.RIGHT):
                     add_edge(
-                        nid(i, j), nid(ni, nj), _offset(centre, side),
+                        nid(i, j, side), nid(ni, nj, side), _offset(centre, side),
                         EdgeKind.SIDEWALK, side, name, physical_id,
                     )
 
-    # crossings: at each intersection, connect the two sidewalk sides across the node
+    # crossings: at each intersection, join the two sides. A real edge between
+    # two real nodes, with a real length — not a self-loop.
     for i in range(GRID):
         for j in range(GRID):
-            n = nid(i, j)
-            x, y = xs[n], ys[n]
+            left, right = nid(i, j, Side.LEFT), nid(i, j, Side.RIGHT)
             physical_id += 1
             add_edge(
-                n, n,
-                LineString([(x - SIDEWALK_OFFSET_M, y), (x + SIDEWALK_OFFSET_M, y)]),
+                left, right,
+                LineString([(xs[left], ys[left]), (xs[right], ys[right])]),
                 EdgeKind.CROSSING, Side.NONE, "crossing", physical_id,
             )
 
@@ -164,8 +187,8 @@ def build_fixture_city(seed: int = 7) -> dict[str, pa.Table]:
     polys = []
     for i in range(GRID - 1):
         for j in range(GRID - 1):
-            cx = xs[nid(i, j)] + BLOCK_M / 2
-            cy = ys[nid(i, j)] + BLOCK_M / 2
+            cx = gx[gidx(i, j)] + BLOCK_M / 2
+            cy = gy[gidx(i, j)] + BLOCK_M / 2
             half = BLOCK_M / 2 - SIDEWALK_OFFSET_M - 2.0
             polys.append(
                 Polygon(
@@ -226,10 +249,10 @@ def build_fixture_city(seed: int = 7) -> dict[str, pa.Table]:
         schema=TREES,
     )
 
-    amen_idx = [nid(1, 1), nid(3, 2), nid(4, 4)]
+    amen_idx = [gidx(1, 1), gidx(3, 2), gidx(4, 4)]
     kinds = [AmenityKind.DRINKING_FOUNTAIN, AmenityKind.COOLING_CENTER,
              AmenityKind.PARK_ENTRANCE]
-    alon, alat = _to_ll.transform(xs[amen_idx], ys[amen_idx])
+    alon, alat = _to_ll.transform(gx[amen_idx], gy[amen_idx])
     amenities = pa.table(
         {
             "amenity_id": pa.array(np.arange(len(amen_idx)), type=pa.uint32()),

@@ -1,11 +1,10 @@
 import inspect
 
 import numpy as np
-import pytest
 
 from shadeway.thermal import tmrt
 
-HOT_AFTERNOON = dict(
+HOT_AFTERNOON = dict(  # noqa: C408 — reads as a named parameter set
     direct_normal_wm2=799.0,
     diffuse_wm2=148.0,
     global_horizontal_wm2=712.0,
@@ -14,7 +13,7 @@ HOT_AFTERNOON = dict(
     cloud_cover_pct=6.0,
     solar_elevation_deg=55.0,
 )
-NIGHT = dict(
+NIGHT = dict(  # noqa: C408 — reads as a named parameter set
     direct_normal_wm2=0.0,
     diffuse_wm2=0.0,
     global_horizontal_wm2=0.0,
@@ -46,7 +45,9 @@ def test_every_constant_carries_a_source_comment():
         "SUNLIT_SURFACE_BUMP_C",
         "SHADED_SURFACE_BUMP_C",
     ):
-        line = next(l for l in source.splitlines() if l.strip().startswith(name))
+        line = next(
+            row for row in source.splitlines() if row.strip().startswith(name)
+        )
         assert "# source:" in line or "source:" in source.split(name)[1][:400], (
             f"{name} has no provenance comment"
         )

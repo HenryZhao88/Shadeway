@@ -1,7 +1,5 @@
 import geopandas as gpd
-import numpy as np
 import pyarrow as pa
-import pytest
 from shapely.geometry import Point
 
 from shadeway_contracts.tables import TREES, validate_table

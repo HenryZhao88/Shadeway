@@ -33,6 +33,18 @@ def _download(scope: Scope) -> Path:
     return socrata_geojson(load_datasets()["trees"], where=where)
 
 
+def _text_column(frame, name: str) -> pd.Series:
+    """A string column, or an empty one of the right length if it is missing.
+
+    Species drives tau, and an unknown species falls back to the global default
+    with `tau_source = "default"` — which is honest. Crashing the whole build
+    because one optional column moved is not.
+    """
+    if name in frame.columns:
+        return frame[name].fillna("").astype(str)
+    return pd.Series([""] * len(frame), index=frame.index, dtype=object)
+
+
 def load(scope: Scope) -> gpd.GeoDataFrame:
     # gpd.read_file parses the FeatureCollection (geometry is null everywhere —
     # we ignore it) and hands back the property columns
@@ -41,7 +53,10 @@ def load(scope: Scope) -> gpd.GeoDataFrame:
     lat = pd.to_numeric(props["latitude"], errors="coerce")
     points = gpd.GeoDataFrame(
         {
-            "species": props.get("spc_latin", "").fillna(""),
+            # `props.get(col, "")` hands back a bare str when the column is
+            # absent, and a str has no .fillna — so an export missing spc_latin
+            # crashed here instead of degrading to unknown species.
+            "species": _text_column(props, "spc_latin"),
             "dbh_cm": (
                 np.clip(
                     pd.to_numeric(props.get("tree_dbh"), errors="coerce"),
@@ -50,7 +65,7 @@ def load(scope: Scope) -> gpd.GeoDataFrame:
                 )
                 * INCH_TO_CM
             ),
-            "borough": props.get("borocode", "").astype(str),
+            "borough": _text_column(props, "borocode"),
         },
         geometry=gpd.points_from_xy(lon, lat),
         crs="EPSG:4326",

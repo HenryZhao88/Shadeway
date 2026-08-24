@@ -1,5 +1,5 @@
-"""Cool-water amenities: drinking fountains, Cool It! cooling sites and spray
-showers.
+"""Cool-water amenities: drinking fountains, Cool It! cooling sites, spray
+showers, and derived park entrances.
 
 NOTE (DATA-FINDINGS #9): no "cooling center" dataset exists on NYC Open Data —
 the official finder is a separate app. The Cool It! datasets (misting stations,
@@ -15,7 +15,7 @@ import geopandas as gpd
 import pandas as pd
 
 from shadeway_pipeline.config import CACHE_DIR, TARGET_CRS, Scope
-from shadeway_pipeline.sources.resolve import load_datasets
+from shadeway_pipeline.sources import parks
 
 PREFETCHED = {
     "fountains": CACHE_DIR / "fountains.geojson",
@@ -66,13 +66,30 @@ def _load_geojson_points(path: Path) -> gpd.GeoDataFrame:
 
 
 def _names(props: pd.DataFrame) -> pd.Series:
-    for col in ("name", "site_name", "park_name", "propertyname"):
+    """Whatever this source calls the place.
+
+    The Parks fountains export truncates its column names to ten characters
+    ("propertyna", "decription" — their typo, not ours), which is why the short
+    forms are in this list. Without them every fountain arrives nameless and
+    the rest-stop card reads "Cool off at Drinking fountain".
+    """
+    for col in (
+        "name", "site_name", "park_name", "propertyname",
+        "propertyna", "signname", "decription", "description",
+    ):
         if col in props.columns:
-            return props[col].fillna("").astype(str)
+            values = props[col].fillna("").astype(str).str.strip()
+            if values.str.len().gt(0).any():
+                return values
     return pd.Series([""] * len(props))
 
 
-def load(scope: Scope) -> gpd.GeoDataFrame:
+def load(scope: Scope, sidewalk_geoms=None) -> gpd.GeoDataFrame:
+    """`sidewalk_geoms` (EPSG:32118 LineStrings, normally the edges the graph
+    build just produced) unlocks AmenityKind.PARK_ENTRANCE. Park entrances are
+    not published by the city and are derived against the pedestrian network —
+    see sources/parks.py. Without the network they are simply absent, and the
+    other two kinds are unaffected."""
     parts: list[tuple[int, gpd.GeoDataFrame]] = []
 
     if PREFETCHED["fountains"].exists():
@@ -93,6 +110,10 @@ def load(scope: Scope) -> gpd.GeoDataFrame:
             crs="EPSG:4326",
         )
         parts.append((1, pts))  # AmenityKind.COOLING_CENTER
+
+    gates = parks.entrances(scope, sidewalk_geoms)
+    if len(gates):
+        parts.append((2, gates.to_crs("EPSG:4326")))  # AmenityKind.PARK_ENTRANCE
 
     if not parts:
         return gpd.GeoDataFrame(

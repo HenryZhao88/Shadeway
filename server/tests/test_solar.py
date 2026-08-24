@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 
-import numpy as np
 import pytest
 
 from shadeway.thermal.solar import sun_position, sun_positions

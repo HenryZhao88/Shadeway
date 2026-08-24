@@ -1,6 +1,7 @@
 import numpy as np
 import pyarrow.parquet as pq
 import pytest
+
 from shadeway_contracts.fixtures import build_fixture_city, write_fixture_city
 from shadeway_contracts.tables import (
     ALL_TABLES,
@@ -84,9 +85,7 @@ def test_samples_are_about_ten_metres_apart(city):
     samples = city["samples"].to_pydict()
     xs = np.asarray(samples["x_m"])
     ys = np.asarray(samples["y_m"])
-    for start, count, length in zip(
-        edges["sample_start"], edges["sample_count"], edges["length_m"]
-    ):
+    for start, count in zip(edges["sample_start"], edges["sample_count"]):
         sl = slice(start, start + count)
         step = np.hypot(np.diff(xs[sl]), np.diff(ys[sl]))
         assert step.max() <= 10.5, "sample spacing exceeds the 10 m contract"
@@ -110,3 +109,47 @@ def test_write_fixture_city_round_trips(tmp_path):
         table = read_table(tmp_path / f"{name}.parquet")
         assert table.num_rows > 0
         assert pq.read_metadata(tmp_path / f"{name}.parquet").num_rows == table.num_rows
+
+
+def test_crossings_join_two_real_nodes():
+    """A crossing must be an edge you can actually walk.
+
+    The fixture city used to give each intersection one node, which made every
+    crossing a `u == v` self-loop — a dead edge no path could ever use, and a
+    topology real NYC data does not have. That divergence meant the flagship
+    side-of-street mechanic was only ever exercised against the real graph.
+    """
+    edges = build_fixture_city()["edges"].to_pydict()
+    crossings = [
+        i for i, kind in enumerate(edges["kind"]) if kind == int(EdgeKind.CROSSING)
+    ]
+    assert crossings, "the fixture city has no crossings in it"
+    for i in crossings:
+        assert edges["u"][i] != edges["v"][i], "crossing is a self-loop"
+        assert edges["length_m"][i] > 1.0, "crossing has no length to walk"
+
+
+def test_no_edge_anywhere_is_a_self_loop():
+    edges = build_fixture_city()["edges"].to_pydict()
+    assert not [
+        i for i, (u, v) in enumerate(zip(edges["u"], edges["v"])) if u == v
+    ]
+
+
+def test_the_two_sides_of_a_street_do_not_share_endpoints():
+    """If they did, a router could change sides for free and the crossing edge
+    would never be worth taking."""
+    edges = build_fixture_city()["edges"].to_pydict()
+    by_parent: dict[int, list[int]] = {}
+    for i, kind in enumerate(edges["kind"]):
+        if kind != int(EdgeKind.SIDEWALK):
+            continue
+        by_parent.setdefault(edges["physical_id"][i], []).append(i)
+
+    pairs = [ids for ids in by_parent.values() if len(ids) == 2]
+    assert pairs, "no street in the fixture has two sides"
+    for left, right in pairs:
+        assert {edges["u"][left], edges["v"][left]} != {
+            edges["u"][right],
+            edges["v"][right],
+        }, "both sides of a street share their endpoints"

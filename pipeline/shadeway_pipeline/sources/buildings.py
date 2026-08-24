@@ -31,16 +31,40 @@ PREFETCHED = {
 }
 
 
+# BIN prefix per borough code. A BIN is a 7-digit number whose leading digit is
+# the borough, so the range [n000000, n999999] is that borough's buildings.
+BIN_PREFIX = {"1": 1_000_000, "2": 2_000_000, "3": 3_000_000,
+              "4": 4_000_000, "5": 5_000_000}
+
+
 def _download(scope: Scope) -> list[Path]:
-    prefetched = [PREFETCHED[b] for b in scope.boroughs if PREFETCHED.get(b, None) is not None and PREFETCHED[b].exists()]
-    if prefetched:
-        return prefetched
-    bin_lo = {"1": 1000000, "3": 3000000}.get(scope.boroughs[0], 1000000)
-    where = (
-        f"bin >= {bin_lo} AND bin < {bin_lo + 1000000} "
-        f"AND feature_code IN ('2100','5110')"
-    )
-    return [socrata_geojson(load_datasets()["buildings"], where=where)]
+    """One source per borough in the scope, prefetched or downloaded.
+
+    Resolved PER BOROUGH rather than all-or-nothing. The earlier version bailed
+    out to a single download keyed on `scope.boroughs[0]` the moment any
+    prefetch file was missing, which silently built manhattan+brooklyn with
+    Manhattan's buildings only — a scene with half its occluders in it and no
+    error to say so. It also returned a partial prefetch list without
+    downloading the rest.
+    """
+    paths: list[Path] = []
+    for borough in scope.boroughs:
+        cached = PREFETCHED.get(borough)
+        if cached is not None and cached.exists():
+            paths.append(cached)
+            continue
+        bin_lo = BIN_PREFIX.get(borough)
+        if bin_lo is None:
+            raise ValueError(
+                f"no BIN range known for borough code {borough!r}; "
+                "add it to BIN_PREFIX before building this scope"
+            )
+        where = (
+            f"bin >= {bin_lo} AND bin < {bin_lo + 1_000_000} "
+            f"AND feature_code IN ('2100','5110')"
+        )
+        paths.append(socrata_geojson(load_datasets()["buildings"], where=where))
+    return paths
 
 
 def _scope_bounds(scope: Scope):

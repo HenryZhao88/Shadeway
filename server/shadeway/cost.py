@@ -56,11 +56,32 @@ class EdgeCostModel:
             relative_humidity_pct=weather.relative_humidity_pct,
         )
         self._sun_cache: dict[int, tuple[float, float]] = {}
+        self._cost_cache: dict[tuple[int, int], EdgeCost] = {}
+        self._durations: np.ndarray | None = None
         self.graph = None
 
     def bind_graph(self, graph) -> None:
         """Called once by the router so traverse() can read edge attributes."""
+        if graph is not self.graph:
+            self._cost_cache.clear()
+            self._durations = None
         self.graph = graph
+
+    def edge_durations(self) -> np.ndarray:
+        """Walk time for every edge, as a single array.
+
+        Walk time does not depend on the time of day — only length, speed and
+        the crossing penalty. That is what lets the router bound its search on
+        the time axis before running a single ray cast.
+        """
+        if self._durations is None:
+            graph = self.graph
+            durations = (
+                graph.edge_length_m.astype(np.float64) / self.walk_speed_ms
+            )
+            durations += (graph.edge_kind == 1) * self.crossing_penalty_s
+            self._durations = durations
+        return self._durations
 
     def _sun(self, when: datetime) -> tuple[float, float]:
         """Sun position, cached to the minute. The sun does not move meaningfully
@@ -72,6 +93,22 @@ class EdgeCostModel:
         return self._sun_cache[key]
 
     def traverse(self, edge_id: int, enter_at: datetime) -> EdgeCost:
+        """Memoised on (edge, minute).
+
+        The label-setting search relaxes the same edge from many labels with
+        arrival times seconds apart, and the sun position it feeds on is
+        already quantised to the minute by `_sun` — so every one of those calls
+        was recomputing an identical answer. Caching it changes no number and
+        takes the search from minutes to well under a second on Manhattan.
+        """
+        key = (int(edge_id), int(enter_at.timestamp() // 60))
+        hit = self._cost_cache.get(key)
+        if hit is None:
+            hit = self._compute(int(edge_id), enter_at)
+            self._cost_cache[key] = hit
+        return hit
+
+    def _compute(self, edge_id: int, enter_at: datetime) -> EdgeCost:
         graph = self.graph
         length_m = float(graph.edge_length_m[edge_id])
         duration_s = length_m / self.walk_speed_ms

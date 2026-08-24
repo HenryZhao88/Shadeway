@@ -6,7 +6,7 @@ which bumps `version` and invalidates the affected horizon cache entries.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +29,7 @@ class Scene:
     crown_top_m: np.ndarray  # float32
     tau: np.ndarray  # float32
     tree_tree: STRtree
+    tree_species: list[str] = field(default_factory=list)  # spc_latin per crown
     version: int = 1
 
     @classmethod
@@ -61,6 +62,9 @@ class Scene:
             crown_top_m=np.asarray(trees.column("crown_top_m"), dtype=np.float32),
             tau=np.asarray(trees.column("tau"), dtype=np.float32),
             tree_tree=STRtree(list(crown_points)),
+            # carried so instructions can say "honey locusts, so dappled light,
+            # not real shade" rather than the anonymous "tree canopy"
+            tree_species=trees.column("species").to_pylist(),
         )
 
     def buildings_near(self, x: float, y: float, radius_m: float) -> np.ndarray:
@@ -75,6 +79,7 @@ class Scene:
         crown_base_m: np.ndarray,
         crown_top_m: np.ndarray,
         tau: np.ndarray,
+        species: str = "",
     ) -> None:
         """Append planted crowns and bump `version`. The lazy kd-tree over
         trunk positions is reset so the next shade query sees the newcomers;
@@ -93,5 +98,7 @@ class Scene:
             [self.crown_top_m, np.asarray(crown_top_m, dtype=np.float32)]
         )
         self.tau = np.concatenate([self.tau, np.asarray(tau, dtype=np.float32)])
+        # keep species aligned with tree_xy — evidence lookups index by crown
+        self.tree_species.extend([species] * len(xy))
         self._kdtree = None  # noqa: SLF001 — rebuilt lazily by occluder
         self.version += 1

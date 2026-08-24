@@ -23,7 +23,7 @@ def _hot_edges(graph, frac: float, seed: int = 7) -> set[int]:
     n = len(graph.edge_u)
     rng = np.random.default_rng(seed)
     chosen = rng.random(n) < frac
-    return set(int(i) for i in np.flatnonzero(chosen))
+    return {int(i) for i in np.flatnonzero(chosen)}
 
 
 @pytest.fixture(scope="module")
@@ -100,17 +100,13 @@ def test_avoiding_hot_edges_costs_time_but_saves_heat(graph):
     assert coolest.mean_feels_like_c <= fastest.mean_feels_like_c
 
 
-@pytest.mark.xfail(
-    reason=(
-        "epsilon-dominance cannot bite on the uniform fixture grid: every "
-        "monotone path has identical duration, and equal-time ties collapse "
-        "under strict dominance at any epsilon. Needs a city with irregular "
-        "block lengths (the Manhattan-scale spike city) to produce near-tie "
-        "label piles."
-    ),
-    strict=False,
-)
 def test_epsilon_dominance_reduces_the_label_count(graph):
+    """This was an xfail while the fixture city gave every intersection a single
+    node: both sidewalks then shared endpoints, every monotone path had an
+    identical duration, and equal-time ties collapsed under strict dominance at
+    any epsilon, so there was nothing for epsilon to merge. Now that crossing
+    sides is a real edge with a real length and a signal penalty, durations
+    differ and the buckets do their job."""
     hot = _hot_edges(graph, 0.5)
     bicriteria.search(
         graph, 0, 30, DEPART, _fake_cost(graph, hot), epsilon_dm=5.0, collect_stats=True

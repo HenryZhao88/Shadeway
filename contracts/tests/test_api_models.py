@@ -3,6 +3,7 @@ from itertools import pairwise
 
 import pytest
 from pydantic import ValidationError
+
 from shadeway_contracts.api import (
     PRESET_PROFILES,
     LatLon,

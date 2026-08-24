@@ -30,8 +30,13 @@ def side_name(bearing_deg: float, side: int) -> str:
     return f"{_COMPASS[index]} side"
 
 
-def build(graph, path, legs) -> list[Instruction]:
+def build(graph, path, legs, evidence=None) -> list[Instruction]:
     """legs is the list of LegStep already built by api.py, in walk order.
+
+    `evidence` is an optional EvidenceProvider. Without one the cards still
+    carry the temperature delta, which is the load-bearing half; with one they
+    also name what is doing the shading and how long the sunny side stays
+    sunny. It is optional so this module stays testable with no scene loaded.
 
     Crossing legs sit between the two sides of a street (and between the two
     streets at every junction), so narration compares each sidewalk leg with
@@ -83,7 +88,7 @@ def build(graph, path, legs) -> list[Instruction]:
                     type="cross",
                     at=at(leg),
                     text=f"Cross to the {this_side} of {leg.street_name}",
-                    why=_why(last_sidewalk, leg),
+                    why=_why(last_sidewalk, leg, evidence),
                 )
             )
         elif last_sidewalk is None or last_sidewalk.street_name != leg.street_name:
@@ -96,7 +101,11 @@ def build(graph, path, legs) -> list[Instruction]:
                         if this_side
                         else f"Turn onto {leg.street_name}"
                     ),
-                    why=_why(last_sidewalk, leg) if last_sidewalk is not None else None,
+                    why=(
+                        _why(last_sidewalk, leg, evidence)
+                        if last_sidewalk is not None
+                        else None
+                    ),
                 )
             )
         # same street, same side: straight through an intersection — no card
@@ -106,15 +115,35 @@ def build(graph, path, legs) -> list[Instruction]:
     return out
 
 
-def _why(previous, leg) -> InstructionWhy | None:
+def _why(previous, leg, evidence=None) -> InstructionWhy | None:
     """The evidence line under the card. This is the bit that makes people
-    believe us, so populate as much of it as we honestly can."""
+    believe us, so populate as much of it as we honestly can.
+
+    Three fields, three different questions:
+      delta_c            how much cooler the side we are moving to is
+      sunlit_until_iso   how long the side we are LEAVING stays in the sun —
+                         only meaningful when we are leaving a sunlit side, and
+                         it is the reason to cross now rather than later
+      shaded_by          what is shading the side we are moving TO
+    """
     delta = round(previous.feels_like_c - leg.feels_like_c, 1)
     dappled = 0.05 < leg.f_sun < 0.5
-    if abs(delta) < 0.3 and not dappled:
+    shaded_by = "tree canopy" if dappled else None
+    sunlit_until = None
+
+    if evidence is not None:
+        if leg.f_sun < 0.5:
+            named, named_dappled = evidence.shaded_by(leg.edge_id, leg.enter_iso)
+            if named:
+                shaded_by, dappled = named, named_dappled
+        if previous.f_sun > 0.5:
+            sunlit_until = evidence.sunlit_until(previous.edge_id, previous.enter_iso)
+
+    if abs(delta) < 0.3 and not dappled and shaded_by is None and sunlit_until is None:
         return None
     return InstructionWhy(
         delta_c=delta if abs(delta) >= 0.3 else None,
-        shaded_by="tree canopy" if dappled else None,
+        shaded_by=shaded_by,
+        sunlit_until_iso=sunlit_until,
         dappled=dappled,
     )

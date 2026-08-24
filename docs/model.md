@@ -105,3 +105,81 @@ after calibration:
 - connectivity 0.970 · both-sides 0 missing · samples tile exactly (520,741)
 - crossings ≤ 40 m ✓ · buildings n=44,793 (p99 124 m, max 435 m)
 - horizon cache: 520,741 samples × 144 B ≈ **75 MB** uint8
+
+## Instruction evidence — what we can and cannot prove
+
+`InstructionWhy` carries three claims under a turn card. Each is computed, and
+each has a stated limit.
+
+**`delta_c`** — the felt-temperature difference between the sidewalk being left
+and the one being joined, both evaluated at the moment of the crossing. Straight
+from the routed legs; no approximation beyond the model itself.
+
+**`sunlit_until_iso`** — for the side being left, the first future moment its
+mean `f_sun` drops below 0.5. Computed by stepping the horizon cache forward in
+5-minute increments over a 6-hour window (`server/shadeway/evidence.py`). It
+answers to the step, not to the second, and it returns nothing at all when the
+side being left is already shaded — a "shade ends at 4pm" reading of a shaded
+block would be exactly backwards.
+
+**`shaded_by`** — the identity of the occluder. Two honest limits:
+
+  * *Buildings have no names.* NYC Building Footprints carries BIN, height and
+    construction year; `name` is null for essentially every footprint, and we do
+    not load PLUTO. So a blocking building is described by what the data
+    actually proves about it — its measured roof height and the street its
+    centroid fronts (nearest graph sample) — giving "the 445 m tower on E 43 St",
+    never an invented address. The design doc's example line, "shaded by 500
+    Fifth", would require an address dataset we do not have.
+  * *Canopy is named by genus.* Species comes from the tree census through
+    `trees.parquet`, so "honey locusts overhead" is the recorded `spc_latin`
+    mapped to a common name. Where `f_sun` sits in the 0.05–0.5 band the card
+    says "dappled light, not full shade", because that is what a τ≈0.38 crown
+    actually delivers.
+
+## Park entrances are derived, not published
+
+There is no park-entrance dataset on NYC Open Data; searching the Socrata
+catalog for "Park Entrance" returns the NYCHA data book and waterfront access
+points. `AmenityKind.PARK_ENTRANCE` is therefore derived
+(`pipeline/shadeway_pipeline/sources/parks.py`) from Parks Properties
+(`enfh-gkve`, 2,064 polygons) against the pedestrian graph: an entrance is a
+point on a park boundary within 15 m of a sidewalk edge. Boundary points are
+sampled every 15 m, thinned to an 80 m minimum separation, and spread evenly to
+a cap of 8 per park so Central Park contributes eight usable gates rather than
+six hundred boundary samples. Landscaped medians filed as `typecategory = Mall`
+(Broadway Malls, Park Avenue) are excluded: you cannot rest in a median.
+
+Manhattan yields 537 derived entrances across 181 parks.
+
+## Client-side shadows
+
+The shadows on the map are not the routing model's output — they are the same
+geometry run in the other direction, in the browser, so the time scrubber costs
+no round trip. A prism's shadow on flat ground is its footprint swept along the
+anti-solar azimuth by `height / tan(elevation)`, so `web/src/map/shadows.ts`
+computes exactly that and draws the convex hull of the footprint and its
+translate.
+
+Two approximations, both erring the same way:
+
+  * The convex hull fills any notch in a concave footprint (a courtyard, an
+    L-shaped tower), so a drawn shadow is never smaller than the true one.
+  * Shadows are cast onto flat ground at z=0; terrain is ignored. Manhattan
+    below 96th is flat enough that this is invisible at street scale.
+
+Both overstate shade slightly on screen and neither feeds the routing, which
+uses the server's ray caster against the same building heights. Sun position
+comes from suncalc (Meeus), which agrees with the server's NOAA implementation
+to well inside the 5-degree azimuth bins the horizon cache quantises to — so the
+map and the route cannot visibly disagree about which side of a street is lit.
+
+## Cool waypoints — the threshold
+
+The rest-stop post-pass (`server/shadeway/waypoints.py`) accumulates thermal load
+as degree-minutes above 26 °C, the UTCI no-stress / moderate-heat-stress boundary
+(Bröde et al. 2012, table 1). Time below that boundary contributes nothing, so a
+shaded stroll at 24 °C is never told to stop and sit down. A stop is offered once
+80 degree-minutes have accumulated — roughly twelve minutes at a felt 33 °C — and
+only if water, a cooling site or a park entrance lies inside a 150 s round-trip
+detour. The accumulator resets after each stop, capped at two per route.

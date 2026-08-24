@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -82,7 +82,7 @@ def test_network_failure_degrades_to_the_fallback_instead_of_500ing(monkeypatch)
     assert snapshot.air_temp_c == FALLBACK_SNAPSHOT.air_temp_c
 
 
-UTC = timezone.utc
+UTC = UTC
 # 19:00 UTC and 15:00 EDT are THE SAME INSTANT; the payload's stamps are NY-local
 SAME_INSTANT_AS_UTC = datetime(2025, 7, 22, 19, 0, tzinfo=UTC)
 

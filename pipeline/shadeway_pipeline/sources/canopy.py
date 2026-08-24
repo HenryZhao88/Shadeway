@@ -23,9 +23,7 @@ def load_window(scope: Scope, resolution_m: float = 1.0):
     import numpy as np
     import rasterio
     from rasterio.transform import from_origin
-    from rasterio.warp import reproject
-    from rasterio.warp import Resampling
-    from pyproj import Transformer
+    from rasterio.warp import Resampling, reproject
 
     wgs = gpd_box(scope)
     minx, miny, maxx, maxy = wgs

@@ -1,0 +1,45 @@
+# Lint configuration, pinned.
+#
+# There was no config here before, so `make lint` ran on whatever defaults the
+# installed ruff happened to ship — which broke the moment ruff widened its
+# default rule set, and which classified `shadeway_contracts` as third-party and
+# so disagreed with the import grouping used in every file in the repo.
+#
+# Both are fixed by saying what we mean.
+
+# The codebase was written to a ~90 column target; nine lines run past it, all
+# of them URLs or coefficient tables where wrapping would hurt.
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", "data", "web", "node_modules"]
+
+[lint]
+select = [
+  "E",   # pycodestyle
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "I",   # import sorting
+  "UP",  # pyupgrade
+  "B",   # bugbear
+  "C4",  # comprehensions
+]
+ignore = [
+  # The tests build fixtures inside loops and comprehensions on purpose; a
+  # function-call default there is readable and never shared.
+  "B008",
+  # `zip(a, b)` is used throughout over arrays of known-equal length. Adding
+  # strict= in twenty places would be noise, not safety.
+  "B905",
+  # Forward references are quoted throughout for consistency, even where
+  # `from __future__ import annotations` makes the quotes redundant.
+  "UP037",
+]
+
+[lint.per-file-ignores]
+# Tests reach into module internals deliberately — that is what a unit test is.
+"*/tests/*" = ["B011"]
+
+[lint.isort]
+# The three packages in this repo. Without this, ruff files
+# `shadeway_contracts` under third-party and wants it grouped with numpy.
+known-first-party = ["shadeway", "shadeway_contracts", "shadeway_pipeline"]

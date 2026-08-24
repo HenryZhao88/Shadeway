@@ -112,3 +112,66 @@ def test_buildings_drop_non_building_feature_codes(tmp_path, monkeypatch):
     frame.to_file(path, driver="GeoJSON")
     monkeypatch.setattr(buildings, "PREFETCHED", {"1": path})
     assert len(buildings.load(SCOPES["midtown"])) == 1
+
+
+def test_every_borough_in_scope_gets_a_building_source(monkeypatch, tmp_path):
+    """A multi-borough scope that is only half prefetched must download the
+    rest, not quietly build a city with half its occluders missing."""
+    from shadeway_pipeline.config import SCOPES
+    from shadeway_pipeline.sources import buildings
+
+    manhattan = tmp_path / "buildings_manhattan.geojson"
+    manhattan.write_text("{}")
+    monkeypatch.setattr(
+        buildings, "PREFETCHED", {"1": manhattan, "3": tmp_path / "absent.geojson"}
+    )
+
+    requested: list[str] = []
+
+    def fake_download(dataset_id, where=None, **_):
+        requested.append(where or "")
+        return tmp_path / f"downloaded_{len(requested)}.geojson"
+
+    monkeypatch.setattr(buildings, "socrata_geojson", fake_download)
+    monkeypatch.setattr(buildings, "load_datasets", lambda: {"buildings": "abcd-1234"})
+
+    paths = buildings._download(SCOPES["manhattan_brooklyn"])
+
+    assert len(paths) == 2, "one source per borough in the scope"
+    assert manhattan in paths
+    assert len(requested) == 1, "only the missing borough should be downloaded"
+    assert "3000000" in requested[0], "Brooklyn's BIN range was not requested"
+
+
+def test_an_unknown_borough_code_fails_loudly(monkeypatch, tmp_path):
+    from shadeway_pipeline.config import Scope
+    from shadeway_pipeline.sources import buildings
+
+    monkeypatch.setattr(buildings, "PREFETCHED", {})
+    scope = Scope("odd", ["9"], (-74.0, 40.7, -73.9, 40.8))
+    with pytest.raises(ValueError, match="BIN range"):
+        buildings._download(scope)
+
+
+def test_trees_survive_an_export_with_no_species_column():
+    """spc_latin drives tau. Losing it should degrade to unknown species, not
+    take the whole build down."""
+    import pandas as pd
+
+    from shadeway_pipeline.sources import trees
+
+    frame = pd.DataFrame({"tree_dbh": [10, 20]})
+    species = trees._text_column(frame, "spc_latin")
+    assert list(species) == ["", ""]
+
+
+def test_trees_keep_species_when_the_column_is_present():
+    import pandas as pd
+
+    from shadeway_pipeline.sources import trees
+
+    frame = pd.DataFrame({"spc_latin": ["Gleditsia triacanthos", None]})
+    assert list(trees._text_column(frame, "spc_latin")) == [
+        "Gleditsia triacanthos",
+        "",
+    ]

@@ -49,13 +49,18 @@ def load(scope: Scope) -> gpd.GeoDataFrame:
     frame = frame[frame["boroughcode"].astype(str).isin(scope.boroughs)]
     # geometry arrives as MultiLineString — explode before anything else
     frame = frame.explode(index_parts=False)
+    # Reproject BEFORE taking midpoints. Interpolating along a geographic CRS
+    # measures distance in degrees, which is not a distance; geopandas warns
+    # about exactly this. At normalized 0.5 the answer barely moves, but the
+    # warning is right and projecting first costs nothing here.
+    frame = gpd.GeoDataFrame(frame, geometry="geometry").to_crs(TARGET_CRS)
     # drop geographically separate landmasses (see ISLAND_EXCLUSIONS_WGS84)
     mids = frame.geometry.interpolate(0.5, normalized=True)
+    mids_wgs84 = mids.to_crs("EPSG:4326")
     keep_mask = ~np.array(
-        [_in_excluded_island(p.x, p.y) for p in mids]
+        [_in_excluded_island(p.x, p.y) for p in mids_wgs84]
     )
     frame = frame[keep_mask]
-    frame = gpd.GeoDataFrame(frame, geometry="geometry").to_crs(TARGET_CRS)
 
     if "streetwidth" in frame.columns:
         width_ft = pd.to_numeric(frame["streetwidth"], errors="coerce")

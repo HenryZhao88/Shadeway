@@ -31,7 +31,8 @@ from shadeway_pipeline.scene import buildings as scene_buildings
 from shadeway_pipeline.scene import trees as scene_trees
 from shadeway_pipeline.sources import amenities as amenities_src
 from shadeway_pipeline.sources import buildings as buildings_src
-from shadeway_pipeline.sources import cscl, trees as trees_src
+from shadeway_pipeline.sources import cscl
+from shadeway_pipeline.sources import trees as trees_src
 
 _to_ll = Transformer.from_crs(f"EPSG:{CRS_EPSG}", "EPSG:4326", always_xy=True)
 
@@ -65,7 +66,9 @@ def build_tables(scope: Scope) -> dict[str, pa.Table]:
     crowns = scene_trees.build_crowns(trees_src.load(scope))
     clock = _stage(f"tree crowns ({len(crowns)})", clock)
 
-    amen = amenities_src.load(scope)
+    # park entrances are derived against the pedestrian network, so the graph
+    # has to exist before amenities are built — see sources/parks.py
+    amen = amenities_src.load(scope, sidewalk_geoms=list(edges_df["geometry"]))
     clock = _stage(f"amenities ({len(amen)})", clock)
 
     lon, lat = _to_ll.transform(
@@ -113,24 +116,7 @@ def build_tables(scope: Scope) -> dict[str, pa.Table]:
     buildings_tbl = pa.Table.from_pandas(prisms, schema=BUILDINGS, preserve_index=False)
     trees_tbl = pa.Table.from_pandas(crowns, schema=TREES, preserve_index=False)
 
-    if len(amen):
-        ax = np.array([g.x for g in amen.geometry])
-        ay = np.array([g.y for g in amen.geometry])
-        alon, alat = _to_ll.transform(ax, ay)
-        amenities_tbl = pa.table(
-            {
-                "amenity_id": pa.array(np.arange(len(amen)), type=pa.uint32()),
-                "kind": pa.array(amen["kind"].to_numpy(), type=pa.uint8()),
-                "name": pa.array(list(amen["name"]), type=pa.string()),
-                "x_m": pa.array(ax, type=pa.float64()),
-                "y_m": pa.array(ay, type=pa.float64()),
-                "lon": pa.array(alon, type=pa.float64()),
-                "lat": pa.array(alat, type=pa.float64()),
-            },
-            schema=AMENITIES,
-        )
-    else:
-        amenities_tbl = AMENITIES.empty_table()
+    amenities_tbl = _amenities_table(amen)
 
     return {
         "nodes": nodes,
@@ -142,10 +128,50 @@ def build_tables(scope: Scope) -> dict[str, pa.Table]:
     }
 
 
+def _amenities_table(amen) -> pa.Table:
+    """The amenities frame as its parquet table. Shared by the full build and
+    the amenities-only rebuild, so the two can never drift."""
+    if not len(amen):
+        return AMENITIES.empty_table()
+    ax = np.array([g.x for g in amen.geometry])
+    ay = np.array([g.y for g in amen.geometry])
+    alon, alat = _to_ll.transform(ax, ay)
+    return pa.table(
+        {
+            "amenity_id": pa.array(np.arange(len(amen)), type=pa.uint32()),
+            "kind": pa.array(amen["kind"].to_numpy(), type=pa.uint8()),
+            "name": pa.array(list(amen["name"]), type=pa.string()),
+            "x_m": pa.array(ax, type=pa.float64()),
+            "y_m": pa.array(ay, type=pa.float64()),
+            "lon": pa.array(alon, type=pa.float64()),
+            "lat": pa.array(alat, type=pa.float64()),
+        },
+        schema=AMENITIES,
+    )
+
+
+def build_amenities_only(scope: Scope, out_dir: Path) -> dict[str, pa.Table]:
+    """Rebuild just the amenities table, against an already-built graph.
+
+    Worth its own path because amenities are the one table nothing else is
+    keyed to: horizon.npz is indexed by sample id, so a full `make data` throws
+    away a warm cache that took minutes to build. This does not touch it.
+    """
+    import shapely
+
+    edges = pq.read_table(Path(out_dir) / "edges.parquet")
+    geoms = list(shapely.from_wkb(edges.column("geom_wkb").to_pylist()))
+    amen = amenities_src.load(scope, sidewalk_geoms=geoms)
+    print(f"  amenities ({len(amen)}) against {len(geoms)} existing edges")
+    return {"amenities": _amenities_table(amen)}
+
+
 def write(tables: dict[str, pa.Table], out_dir: Path) -> None:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     for name in ALL_TABLES:
+        if name not in tables:
+            continue
         path = out_dir / f"{name}.parquet"
         pq.write_table(tables[name], path, compression="zstd")
         print(f"  wrote {path}  ({tables[name].num_rows} rows)")
@@ -155,8 +181,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="build shadeway graph + scene")
     parser.add_argument("--out", type=Path, default=OUT_DIR)
     parser.add_argument("--scope", choices=sorted(SCOPES), default=DEFAULT_SCOPE)
+    parser.add_argument(
+        "--only",
+        choices=["amenities"],
+        help="rebuild one table against the existing build. Use it for "
+             "amenities: a full rebuild renumbers sample ids and would "
+             "invalidate a warm horizon.npz that took minutes to make.",
+    )
     args = parser.parse_args()
-    write(build_tables(SCOPES[args.scope]), args.out)
+    scope = SCOPES[args.scope]
+    if args.only == "amenities":
+        write(build_amenities_only(scope, args.out), args.out)
+        return
+    write(build_tables(scope), args.out)
     print(f"\nnow run:  python -m shadeway_pipeline.validate --data {args.out}")
 
 

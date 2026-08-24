@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+
 from shadeway.stub_api import app
 from shadeway_contracts.api import (
     DepartureCurveResponse,
@@ -84,3 +85,34 @@ def test_cors_allows_the_vite_dev_server(client):
         },
     )
     assert resp.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_stub_serves_buildings_so_the_client_can_cast_shadows():
+    """`make stub` + `make dev` is the documented no-download path. A client
+    with no footprints opens on a city with no shade in it, which is the one
+    thing the first five seconds of the demo is about."""
+    from fastapi.testclient import TestClient
+
+    from shadeway.stub_api import app
+
+    client = TestClient(app)
+    response = client.get("/api/buildings", params={"bbox": "-180,-90,180,90"})
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["buildings"], "the fixture city has no prisms in it"
+    for building in payload["buildings"]:
+        assert building["height_m"] > 0
+        assert len(building["polygon"]) >= 3
+        for lon, lat in building["polygon"]:
+            assert -180 <= lon <= 180 and -90 <= lat <= 90
+
+
+def test_stub_buildings_respect_the_bbox():
+    from fastapi.testclient import TestClient
+
+    from shadeway.stub_api import app
+
+    client = TestClient(app)
+    empty = client.get("/api/buildings", params={"bbox": "10,10,11,11"}).json()
+    assert empty["buildings"] == []

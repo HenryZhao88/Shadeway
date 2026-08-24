@@ -1,4 +1,3 @@
-import pyarrow as pa
 
 from shadeway_contracts.fixtures import build_fixture_city
 from shadeway_pipeline import validate

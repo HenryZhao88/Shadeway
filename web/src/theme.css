@@ -1,0 +1,805 @@
+/* shadeway — a field instrument, not a dashboard.
+ *
+ * Two rules hold the whole thing together:
+ *   1. Temperature owns the saturated colours. Nothing else may use them.
+ *   2. Time owns exactly one warm yellow (--sun). Everything else is achromatic.
+ *
+ * That is why the interface never turns into a fruit salad even though it has a
+ * map, two routes, three charts and a slider on screen at once.
+ *
+ * The heat ramp is the published UTCI assessment scale (Broede et al. 2012,
+ * table 1), hinged on the 26 C no-stress / heat-stress boundary — so it is a
+ * diverging scale with a near-neutral midpoint, by construction rather than by
+ * taste. Adjacent stops sit inside the CVD floor band, so colour is NEVER the
+ * only channel: the strip carries a degree axis, the legend names every
+ * category, and every route prints its own number.
+ */
+
+:root {
+  --ground: #0e1319;
+  --panel: #161c24;
+  --panel-2: #1e262f;
+  --panel-3: #263038;
+  --rule: #2a3540;
+  --rule-bright: #3a4854;
+
+  --ink: #e8edf2;
+  --ink-2: #9aa7b4;
+  --ink-3: #64727f;
+
+  --heat-18: #50bfbe; /* no thermal stress */
+  --heat-26: #b4ae99; /* the heat-stress boundary */
+  --heat-32: #edb333; /* moderate heat stress */
+  --heat-38: #f87724; /* strong heat stress */
+  --heat-46: #e52751; /* very strong / extreme */
+
+  --sun: #ffd979;
+  --shade: #6f8fa8; /* the cool route's identity — never a heat colour */
+
+  --display: "Archivo", "Helvetica Neue", sans-serif;
+  --body: "IBM Plex Sans", system-ui, sans-serif;
+  --data: "IBM Plex Mono", ui-monospace, monospace;
+
+  --rail: 372px;
+  --step: 14px;
+  --radius: 3px;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Default margins are set in em, so a 88px hero number would otherwise carry
+ * an 88px gap under it. Every gap in this interface is set deliberately. */
+p,
+ul,
+ol,
+dl,
+dd,
+figure,
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  padding: 0;
+}
+ul,
+ol {
+  list-style: none;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Every number in this interface is a readout: tabular, so digits do not
+ * shuffle sideways as values change while you drag the scrubber. */
+.num {
+  font-family: var(--data);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.eyebrow {
+  font-family: var(--data);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--sun);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: none;
+  cursor: grab;
+}
+input[type="range"]:active {
+  cursor: grabbing;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 3px;
+  height: 44px;
+  border-radius: 1px;
+  background: var(--sun);
+  box-shadow: 0 0 0 1px var(--ground), 0 0 18px rgba(255, 217, 121, 0.55);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 3px;
+  height: 44px;
+  border: none;
+  border-radius: 1px;
+  background: var(--sun);
+  box-shadow: 0 0 0 1px var(--ground), 0 0 18px rgba(255, 217, 121, 0.55);
+}
+
+::selection {
+  background: rgba(255, 217, 121, 0.28);
+}
+
+/* ------------------------------------------------------------------ shell */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--rail) 1fr;
+  grid-template-rows: 46px 1fr 78px;
+  grid-template-areas:
+    "topbar topbar"
+    "rail   map"
+    "scrub  scrub";
+  height: 100%;
+}
+
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: var(--step);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--panel);
+}
+
+.wordmark {
+  font-family: var(--display);
+  font-weight: 700;
+  font-stretch: 112%;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+.wordmark span {
+  color: var(--sun);
+}
+
+.topbar-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.rail {
+  grid-area: rail;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-right: 1px solid var(--rule);
+  background: var(--panel);
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-bright) var(--panel);
+}
+.rail::-webkit-scrollbar {
+  width: 8px;
+}
+.rail::-webkit-scrollbar-thumb {
+  background: var(--rule-bright);
+  border-radius: 4px;
+}
+
+.map-area {
+  grid-area: map;
+  position: relative;
+  overflow: hidden;
+}
+
+.scrubber {
+  grid-area: scrub;
+  border-top: 1px solid var(--rule);
+  background: var(--panel);
+}
+
+/* ------------------------------------------------------------------ blocks */
+
+.block {
+  padding: 16px;
+  border-bottom: 1px solid var(--rule);
+}
+.block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.hint {
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chip-row {
+  display: flex;
+  gap: 4px;
+}
+.chip {
+  flex: 1;
+  padding: 7px 6px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  text-align: center;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.chip:hover {
+  border-color: var(--rule-bright);
+  color: var(--ink);
+}
+.chip[aria-pressed="true"] {
+  background: var(--panel-3);
+  border-color: var(--sun);
+  color: var(--ink);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.field + .field {
+  margin-top: 6px;
+}
+.field-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+}
+.field-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.field-coord {
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.ghost-button {
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  transition: border-color 120ms, color 120ms;
+}
+.ghost-button:hover:not(:disabled) {
+  border-color: var(--rule-bright);
+  color: var(--ink);
+}
+.ghost-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------------- hero */
+
+.hero {
+  padding: 20px 16px 18px;
+  border-bottom: 1px solid var(--rule);
+}
+.hero-degrees {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-family: var(--display);
+  font-weight: 800;
+  font-stretch: 118%;
+  font-size: 88px;
+  line-height: 0.84;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.hero-unit {
+  font-size: 26px;
+  line-height: 1;
+  padding-top: 6px;
+  color: var(--ink-2);
+  font-stretch: 100%;
+}
+.hero-caption {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 30ch;
+}
+.hero-caption b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.hero-empty {
+  font-family: var(--display);
+  font-weight: 700;
+  font-stretch: 118%;
+  font-size: 40px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ink-3);
+}
+
+/* ------------------------------------------------------- the thermal strip */
+
+.strip-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+}
+.strip-row + .strip-row {
+  margin-top: 12px;
+}
+.strip-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.strip-name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.strip-stats {
+  font-family: var(--data);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  color: var(--ink-2);
+  text-align: right;
+  white-space: nowrap;
+}
+.strip {
+  position: relative;
+  height: 30px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--panel-2);
+  display: flex;
+  cursor: default;
+}
+.strip-seg {
+  height: 100%;
+  transform-origin: left center;
+}
+.strip.animate .strip-seg {
+  animation: strip-wipe 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes strip-wipe {
+  from {
+    transform: scaleX(0);
+    opacity: 0.2;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+.strip-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--ground);
+  box-shadow: 0 0 0 0.5px rgba(232, 237, 242, 0.35);
+}
+.strip-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 14px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.legend-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+/* ---------------------------------------------------------------- compare */
+
+.compare {
+  display: grid;
+  gap: 6px;
+}
+.option {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  text-align: left;
+  transition: background 120ms, border-color 120ms;
+}
+.option:hover {
+  background: var(--panel-3);
+}
+.option[aria-pressed="true"] {
+  border-color: var(--rule-bright);
+  background: var(--panel-3);
+}
+.option-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.option-sub {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.option-temp {
+  font-family: var(--display);
+  font-weight: 700;
+  font-stretch: 112%;
+  font-size: 26px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.option-mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.verdict {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--sun);
+  background: var(--panel-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.verdict b {
+  font-family: var(--display);
+  font-weight: 700;
+  font-stretch: 112%;
+}
+
+/* ------------------------------------------------------------ turn cards */
+
+.turns {
+  display: grid;
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.turn {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  text-align: left;
+  width: 100%;
+}
+.turn:hover {
+  background: var(--panel-3);
+}
+.turn-kind {
+  font-family: var(--data);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding-top: 2px;
+}
+.turn-cross .turn-kind {
+  color: var(--sun);
+}
+.turn-rest .turn-kind {
+  color: var(--heat-18);
+}
+.turn-text {
+  font-size: 13px;
+}
+.turn-why {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.turn-why .num {
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------- charts */
+
+.chart {
+  position: relative;
+}
+.chart svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+.chart-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.tooltip {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  padding: 6px 8px;
+  border: 1px solid var(--rule-bright);
+  border-radius: var(--radius);
+  background: var(--ground);
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.table-toggle {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.data-table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-family: var(--data);
+  font-size: 10.5px;
+}
+.data-table th,
+.data-table td {
+  padding: 3px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--rule);
+}
+.data-table th {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.data-table td:first-child,
+.data-table th:first-child {
+  text-align: left;
+}
+
+/* ------------------------------------------------------------- scrubber */
+
+.scrub-inner {
+  display: grid;
+  grid-template-columns: 128px 1fr auto;
+  align-items: center;
+  gap: 18px;
+  height: 100%;
+  padding: 0 20px;
+}
+.scrub-clock {
+  font-family: var(--display);
+  font-weight: 700;
+  font-stretch: 108%;
+  font-size: 27px;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.scrub-track {
+  position: relative;
+  height: 52px;
+}
+.scrub-track svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.scrub-track input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+.scrub-status {
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: right;
+  min-width: 96px;
+}
+
+/* --------------------------------------------------------- map furniture */
+
+.map-overlay {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+.map-readout {
+  top: 12px;
+  right: 12px;
+  display: grid;
+  gap: 3px;
+  padding: 9px 11px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: rgba(14, 19, 25, 0.88);
+  backdrop-filter: blur(6px);
+}
+.map-readout div {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.map-readout b {
+  color: var(--ink);
+  font-weight: 500;
+}
+.map-tools {
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+.map-hint {
+  bottom: 12px;
+  left: 12px;
+  font-size: 11px;
+  color: var(--ink-3);
+  background: rgba(14, 19, 25, 0.86);
+  padding: 5px 9px;
+  border-radius: var(--radius);
+  border: 1px solid var(--rule);
+}
+.map-tooltip {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  transform: translate(10px, -50%);
+  padding: 5px 8px;
+  border: 1px solid var(--rule-bright);
+  border-radius: var(--radius);
+  background: var(--ground);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.banner {
+  margin: 0;
+  padding: 9px 16px;
+  font-size: 12px;
+  background: rgba(229, 39, 81, 0.14);
+  border-bottom: 1px solid rgba(229, 39, 81, 0.4);
+  color: var(--ink);
+}
+.banner.calm {
+  background: var(--panel-2);
+  border-bottom-color: var(--rule);
+  color: var(--ink-2);
+}
+
+.spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--rule-bright);
+  border-top-color: var(--sun);
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 1000px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 46px 44vh 1fr 78px;
+    grid-template-areas:
+      "topbar"
+      "map"
+      "rail"
+      "scrub";
+  }
+  .rail {
+    border-right: none;
+    border-top: 1px solid var(--rule);
+  }
+  .hero-degrees {
+    font-size: 68px;
+  }
+  .scrub-inner {
+    grid-template-columns: 92px 1fr;
+    gap: 12px;
+    padding: 0 12px;
+  }
+  .scrub-status {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

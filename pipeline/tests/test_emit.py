@@ -50,7 +50,11 @@ def tiny_city(monkeypatch):
     monkeypatch.setattr(emit.cscl, "load", lambda scope: streets)
     monkeypatch.setattr(emit.buildings_src, "load", lambda scope: buildings)
     monkeypatch.setattr(emit.trees_src, "load", lambda scope: trees)
-    monkeypatch.setattr(emit.amenities_src, "load", lambda scope: amenities)
+    # signature mirrors sources/amenities.load: the graph is passed in so park
+    # entrances can be derived against it
+    monkeypatch.setattr(
+        emit.amenities_src, "load", lambda scope, sidewalk_geoms=None: amenities
+    )
 
 
 def test_build_produces_every_table(tiny_city):

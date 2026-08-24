@@ -1,6 +1,6 @@
 import numpy as np
-from shapely import STRtree
 import shapely
+from shapely import STRtree
 
 from shadeway import occluder
 from shadeway.scene import Scene

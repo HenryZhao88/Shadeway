@@ -77,7 +77,8 @@ def test_f_sun_and_svf_are_reported_for_the_ui(model):
 
 def test_the_router_never_needs_to_import_thermal():
     """The cost model is a callable. That is the entire coupling."""
-    import shadeway.router.graph as router_graph
     import inspect
+
+    import shadeway.router.graph as router_graph
 
     assert "thermal" not in inspect.getsource(router_graph)

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -169,3 +169,77 @@ def test_departure_curve_never_emits_bare_nan_json(client, monkeypatch):
     assert "NaN" not in response.text, "bare NaN is not valid JSON for browsers"
     body = response.json()
     assert body["points"] == []
+
+
+def test_buildings_endpoint_serves_the_occluders_the_router_uses(client):
+    """The map and the routing must never disagree about what casts shade, so
+    the client draws its shadows from this exact building set."""
+    from shadeway.api import _state
+
+    state = _state()
+    lon, lat = state.graph.node_lonlat[0]
+    response = client.get(
+        "/api/buildings",
+        params={"bbox": f"{lon - 0.05},{lat - 0.05},{lon + 0.05},{lat + 0.05}"},
+    )
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["buildings"], "no prisms in a bbox that covers the scene"
+    assert payload["truncated"] is False
+    for building in payload["buildings"]:
+        assert building["height_m"] > 0
+        assert len(building["polygon"]) >= 3
+
+
+def test_buildings_come_back_tallest_first(client):
+    """A truncated response must lose the buildings that matter least."""
+    from shadeway.api import _state
+
+    state = _state()
+    lon, lat = state.graph.node_lonlat[0]
+    payload = client.get(
+        "/api/buildings",
+        params={"bbox": f"{lon - 0.05},{lat - 0.05},{lon + 0.05},{lat + 0.05}"},
+    ).json()
+
+    tops = [b["height_m"] + b["base_m"] for b in payload["buildings"]]
+    assert tops == sorted(tops, reverse=True)
+
+
+def test_buildings_report_when_they_were_cut_off(client):
+    from shadeway.api import _state
+
+    state = _state()
+    lon, lat = state.graph.node_lonlat[0]
+    payload = client.get(
+        "/api/buildings",
+        params={
+            "bbox": f"{lon - 0.05},{lat - 0.05},{lon + 0.05},{lat + 0.05}",
+            "max_features": 1,
+        },
+    ).json()
+
+    assert len(payload["buildings"]) == 1
+    assert payload["truncated"] is True
+
+
+def test_a_bbox_with_nothing_in_it_is_not_an_error(client):
+    payload = client.get("/api/buildings", params={"bbox": "10,10,10.1,10.1"}).json()
+    assert payload == {"buildings": [], "truncated": False}
+
+
+def test_amenities_are_served_from_the_index_not_the_parquet(client):
+    """The map asks for these on every pan, so they must not re-read a file."""
+    from shadeway.api import _state
+
+    state = _state()
+    lon, lat = state.graph.node_lonlat[0]
+    response = client.get(
+        "/api/amenities",
+        params={"bbox": f"{lon - 0.05},{lat - 0.05},{lon + 0.05},{lat + 0.05}"},
+    )
+    assert response.status_code == 200
+    for record in response.json():
+        assert set(record) == {"amenity_id", "kind", "name", "lat", "lon"}
+    assert len(state.amenities) >= len(response.json())

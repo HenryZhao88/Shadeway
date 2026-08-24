@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import time
 import uuid
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -16,7 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pyproj import Transformer
 
 from shadeway import instructions as instr
+from shadeway import waypoints as waypoints_mod
 from shadeway.cost import EdgeCostModel
+from shadeway.evidence import EvidenceProvider
 from shadeway.horizon import HorizonCache
 from shadeway.router import timedep
 from shadeway.router.graph import Graph
@@ -38,7 +42,7 @@ from shadeway_contracts.api import (
     TimeseriesResponse,
     WeatherSnapshot,
 )
-from shadeway_contracts.tables import CRS_EPSG, read_table
+from shadeway_contracts.tables import CRS_EPSG
 
 _to_ll = Transformer.from_crs(f"EPSG:{CRS_EPSG}", "EPSG:4326", always_xy=True)
 
@@ -50,6 +54,7 @@ class AppState:
     horizon: HorizonCache
     weather: WeatherClient
     data_dir: Path
+    amenities: waypoints_mod.AmenityIndex
 
     @classmethod
     def build(cls) -> "AppState":
@@ -72,6 +77,7 @@ class AppState:
             horizon=horizon,
             weather=WeatherClient(),
             data_dir=data_dir,
+            amenities=waypoints_mod.AmenityIndex.load(data_dir),
         )
 
 
@@ -93,7 +99,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_ROUTE_CACHE: dict[str, tuple[Route, list[int]]] = {}
+# route_id -> (route, edge ids, the request that produced it).
+#
+# Route ids are labels ("fastest", "shadeway"), so they collide across
+# requests by design — the client asks for /route/shadeway/timeseries and means
+# the shadeway it is currently looking at. Keying on the label alone therefore
+# has to be paired with (a) replacing the entry on every new /route call, which
+# keeps it from going stale after a re-route or a plant, and (b) a bounded
+# store, which keeps it from growing without limit. Both below.
+_ROUTE_CACHE: "OrderedDict[str, tuple[Route, list[int], RouteRequest]]" = OrderedDict()
+_ROUTE_CACHE_MAX = 64
+
+
+def _remember(route_id: str, route: Route, edges: list[int], request: RouteRequest):
+    _ROUTE_CACHE.pop(route_id, None)  # replace, never accumulate stale variants
+    _ROUTE_CACHE[route_id] = (route, edges, request)
+    while len(_ROUTE_CACHE) > _ROUTE_CACHE_MAX:
+        _ROUTE_CACHE.popitem(last=False)
 
 
 @app.get("/api/health")
@@ -108,6 +130,25 @@ def health() -> dict[str, object]:
         "n_samples": int(state.graph.n_samples),
         "scene_version": state.scene.version,
     }
+
+
+def _add_waypoints(route: Route, walk_speed_ms: float) -> Route:
+    """The cool-waypoints post-pass. Deleting these four lines deletes the
+    feature; nothing else in the file refers to it."""
+    state = _state()
+    suggestions = waypoints_mod.suggest(
+        route, state.amenities, state.graph, walk_speed_ms=walk_speed_ms
+    )
+    if not suggestions:
+        return route
+    cards = waypoints_mod.rest_instructions(suggestions, route)
+    instructions = list(route.instructions)
+    # rest cards go in ahead of "Arrive", in walk order
+    tail = 1 if instructions and instructions[-1].type == "arrive" else 0
+    instructions[len(instructions) - tail : len(instructions) - tail] = cards
+    return route.model_copy(
+        update={"waypoints": suggestions, "instructions": instructions}
+    )
 
 
 def _cost_model(origin_lonlat, when: datetime, walk_speed_ms: float) -> EdgeCostModel:
@@ -145,7 +186,17 @@ def _leg(edge_id: int, enter_at: datetime, cost) -> LegStep:
     )
 
 
-def _to_route(path, route_id: str, label: str, depart: datetime, model) -> Route:
+def _evidence(origin_lonlat) -> EvidenceProvider:
+    state = _state()
+    return EvidenceProvider(
+        state.graph, state.scene, state.horizon,
+        lat=origin_lonlat[1], lon=origin_lonlat[0],
+    )
+
+
+def _to_route(
+    path, route_id: str, label: str, depart: datetime, model, evidence=None
+) -> Route:
     legs: list[LegStep] = []
     clock = depart
     for edge_id in path.edges:
@@ -178,7 +229,7 @@ def _to_route(path, route_id: str, label: str, depart: datetime, model) -> Route
             ),
         ),
         legs=legs,
-        instructions=instr.build(_state().graph, path, legs),
+        instructions=instr.build(_state().graph, path, legs, evidence),
     )
 
 
@@ -208,15 +259,19 @@ def route(request: RouteRequest) -> RouteResponse:
         raise HTTPException(404, "no route found")
 
     paths = sorted(paths, key=lambda p: p.duration_s)[: request.max_alternatives]
+    evidence = _evidence((request.origin.lon, request.origin.lat))
     routes: dict[str, Route] = {}
     frontier: list[FrontierPoint] = []
     for index, path in enumerate(paths):
         route_id = "fastest" if index == 0 else (
             "shadeway" if index == len(paths) - 1 else f"alt{index}"
         )
-        built = _to_route(path, route_id, route_id, request.depart_iso, model)
+        built = _to_route(
+            path, route_id, route_id, request.depart_iso, model, evidence
+        )
+        built = _add_waypoints(built, request.walk_speed_ms)
         routes[route_id] = built
-        _ROUTE_CACHE[route_id] = (built, path.edges)
+        _remember(route_id, built, path.edges, request)
         frontier.append(
             FrontierPoint(
                 route_id=route_id,
@@ -252,16 +307,22 @@ def timeseries(
     route_id: str,
     depart_iso: datetime,
     step_minutes: int = Query(default=5, ge=1, le=60),
+    walk_speed_ms: float | None = Query(default=None, gt=0.3, le=3.0),
 ) -> TimeseriesResponse:
     """The heat-vs-time curve. One call returns the whole series, because it is
     the same sample points evaluated at N different times and the horizon cache
-    makes that almost free."""
+    makes that almost free.
+
+    Walk speed defaults to whatever the /route call that produced this route
+    asked for, so a slow walker's curve is that walker's curve — pass
+    walk_speed_ms only to override it."""
     cached = _ROUTE_CACHE.get(route_id)
     if cached is None:
         raise HTTPException(404, "unknown route id — request /api/route first")
-    built, edges = cached
+    built, edges, origin_request = cached
     lon, lat = built.legs[0].geometry[0]
-    model = _cost_model((lon, lat), depart_iso, 1.35)
+    speed = walk_speed_ms if walk_speed_ms is not None else origin_request.walk_speed_ms
+    model = _cost_model((lon, lat), depart_iso, speed)
 
     steps = max(2, int(built.duration_s / 60.0 / step_minutes) + 1)
     points: list[TimeseriesPoint] = []
@@ -284,33 +345,53 @@ def timeseries(
 def departure_curve(
     origin_lat: float, origin_lon: float, dest_lat: float, dest_lon: float,
     from_iso: datetime, hours: int = Query(default=4, ge=1, le=12),
+    walk_speed_ms: float = Query(default=1.35, gt=0.3, le=3.0),
 ) -> DepartureCurveResponse:
     """Re-route at 15-minute departures across the window. The horizon cache
-    makes each search an array-lookup exercise; the searches share nothing."""
+    makes each search an array-lookup exercise; the searches share nothing —
+    which is exactly why they run in parallel here.
+
+    Threads, not processes: the work is numpy over a horizon cache that every
+    thread reads and none writes (it is warmed before the sweep starts, below),
+    and numpy drops the GIL for the array maths. Processes would have to ship a
+    75 MB cache to each worker and would lose more than they gained."""
     state = _state()
     graph = state.graph
     origin = graph.nearest_node(origin_lon, origin_lat)
     destination = graph.nearest_node(dest_lon, dest_lat)
     steps = hours * 4  # 15-minute resolution, per the spec
-    points: list[DeparturePoint] = []
-    for i in range(steps):
-        depart = from_iso + timedelta(minutes=15 * i)
+    departures = [from_iso + timedelta(minutes=15 * i) for i in range(steps)]
+
+    def one(depart: datetime) -> DeparturePoint | None:
         try:
-            model = _cost_model((origin_lon, origin_lat), depart, 1.35)
+            model = _cost_model((origin_lon, origin_lat), depart, walk_speed_ms)
             paths = timedep.solve(graph, origin, destination, depart, model)
         except Exception:
             paths = []
         if not paths:
-            continue  # failed departures are dropped, never NaN — bare NaN is
-            # invalid JSON and would kill JSON.parse in the browser
+            return None  # failed departures are dropped, never NaN — bare NaN
+            # is invalid JSON and would kill JSON.parse in the browser
         best = min(paths, key=lambda p: p.heat_dm / max(p.duration_s / 60.0, 1e-6))
-        points.append(
-            DeparturePoint(
-                depart_iso=depart,
-                best_mean_feels_like_c=best.mean_feels_like_c,
-                best_duration_s=best.duration_s,
-            )
+        return DeparturePoint(
+            depart_iso=depart,
+            best_mean_feels_like_c=best.mean_feels_like_c,
+            best_duration_s=best.duration_s,
         )
+
+    if not state.horizon.warm.all():
+        # a cold cache would have the threads racing to write the same entries;
+        # do the first departure alone so the corridor is warm, then fan out
+        first = one(departures[0]) if departures else None
+        rest = departures[1:]
+    else:
+        first, rest = None, departures
+
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(rest)))) as pool:
+        results = list(pool.map(one, rest)) if rest else []
+    if first is not None:
+        results.insert(0, first)
+    points = [point for point in results if point is not None]
+
     best_index = (
         min(range(len(points)), key=lambda i: points[i].best_mean_feels_like_c)
         if points
@@ -326,14 +407,74 @@ def weather(lat: float, lon: float, at_iso: datetime) -> WeatherSnapshot:
 
 @app.get("/api/amenities")
 def amenities(bbox: str) -> list[dict[str, object]]:
+    """Pins for the current viewport. Served off the in-memory index rather
+    than re-reading the parquet, because the map asks for this on every pan."""
     west, south, east, north = (float(v) for v in bbox.split(","))
-    table = read_table(_state().data_dir / "amenities.parquet").to_pylist()
     return [
         {"amenity_id": r["amenity_id"], "kind": r["kind"], "name": r["name"],
          "lat": r["lat"], "lon": r["lon"]}
-        for r in table
+        for r in _state().amenities.records
         if west <= r["lon"] <= east and south <= r["lat"] <= north
     ]
+
+
+@app.get("/api/buildings")
+def buildings(
+    bbox: str, max_features: int = Query(default=4000, ge=1, le=20000)
+) -> dict[str, object]:
+    """Occluder footprints for the viewport, so the client can cast its own
+    shadows on the GPU.
+
+    This is the same building set the ray caster uses — the shadows on screen
+    and the shade in the routing come from one source, which is the whole
+    reason to serve it rather than let the basemap supply its own.
+
+    Tallest first, so a truncated response loses the buildings that matter
+    least. Returned as plain dicts, like /api/amenities: it is map furniture,
+    not part of the frozen route contract.
+    """
+    state = _state()
+    west, south, east, north = (float(v) for v in bbox.split(","))
+    (x0, x1), (y0, y1) = _ll_to_xy_box(west, south, east, north)
+    box = shapely.box(x0, y0, x1, y1)
+    hits = state.scene.building_tree.query(box)
+    if len(hits) == 0:
+        return {"buildings": [], "truncated": False}
+
+    heights = (
+        state.scene.building_bases_m[hits] + state.scene.building_heights_m[hits]
+    )
+    order = np.argsort(-heights)[:max_features]
+    out = []
+    for index in hits[order]:
+        geom = state.scene.building_geoms[int(index)]
+        ring = getattr(geom, "exterior", None)
+        if ring is None:
+            continue
+        coords = shapely.get_coordinates(ring)
+        lon, lat = _to_ll.transform(coords[:, 0], coords[:, 1])
+        out.append(
+            {
+                "building_id": int(index),
+                "height_m": float(state.scene.building_heights_m[int(index)]),
+                "base_m": float(state.scene.building_bases_m[int(index)]),
+                "polygon": [
+                    [round(float(a), 6), round(float(b), 6)]
+                    for a, b in zip(lon, lat)
+                ],
+            }
+        )
+    return {"buildings": out, "truncated": bool(len(hits) > max_features)}
+
+
+def _ll_to_xy_box(west: float, south: float, east: float, north: float):
+    corners = [
+        _ll_to_xy(south, west), _ll_to_xy(south, east),
+        _ll_to_xy(north, west), _ll_to_xy(north, east),
+    ]
+    xs = [c[0] for c in corners]
+    ys = [c[1] for c in corners]
+    return (min(xs), max(xs)), (min(ys), max(ys))
 
 
 @app.post("/api/scene/plant", response_model=PlantResponse)
@@ -364,6 +505,7 @@ def plant(req: PlantRequest) -> PlantResponse:
         crown_base_m=bases,
         crown_top_m=tops,
         tau=taus,
+        species=req.species,
     )
     return PlantResponse(
         planted=len(positions),

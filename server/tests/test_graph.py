@@ -1,4 +1,3 @@
-import numpy as np
 import pytest
 
 from shadeway.router.graph import Graph

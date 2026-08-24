@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+
 from shadeway_contracts.api import (
     DepartureCurveResponse,
     DeparturePoint,
@@ -130,6 +131,48 @@ def amenities(bbox: str) -> list[dict[str, object]]:
          "lat": r["lat"], "lon": r["lon"]}
         for r in table
     ]
+
+
+@app.get("/api/buildings")
+def buildings(
+    bbox: str, max_features: int = Query(default=4000, ge=1, le=20000)
+) -> dict[str, object]:
+    """The fixture city's prisms, in lon/lat, so the client draws real shadows
+    against the stub too. Without this the documented no-download path
+    (`make stub` + `make dev`) would open on a city with no shade in it, which
+    is the one thing the first five seconds of the demo is about."""
+    import shapely
+    from pyproj import Transformer
+
+    from shadeway_contracts.fixtures import build_fixture_city
+    from shadeway_contracts.tables import CRS_EPSG
+
+    to_ll = Transformer.from_crs(f"EPSG:{CRS_EPSG}", "EPSG:4326", always_xy=True)
+    west, south, east, north = (float(v) for v in bbox.split(","))
+    table = build_fixture_city()["buildings"].to_pylist()
+
+    out: list[dict[str, object]] = []
+    for row in table:
+        geom = shapely.from_wkb(row["geom_wkb"])
+        ring = getattr(geom, "exterior", None)
+        if ring is None:
+            continue
+        coords = shapely.get_coordinates(ring)
+        lon, lat = to_ll.transform(coords[:, 0], coords[:, 1])
+        polygon = [[float(a), float(b)] for a, b in zip(lon, lat)]
+        if not any(
+            west <= x <= east and south <= y <= north for x, y in polygon
+        ):
+            continue
+        out.append(
+            {
+                "building_id": int(row["building_id"]),
+                "height_m": float(row["height_m"]),
+                "base_m": float(row["base_m"]),
+                "polygon": polygon,
+            }
+        )
+    return {"buildings": out[:max_features], "truncated": len(out) > max_features}
 
 
 @app.post("/api/scene/plant", response_model=PlantResponse)

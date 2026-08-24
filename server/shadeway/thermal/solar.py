@@ -12,9 +12,9 @@ range, which is far tighter than our 5-degree azimuth bins need.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Sequence
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -106,7 +106,7 @@ def _positions(times_utc: np.ndarray, lat: float, lon: float):
 def sun_position(when: datetime, lat: float, lon: float) -> SunPosition:
     if when.tzinfo is None:
         raise ValueError("sun_position needs a timezone-aware datetime")
-    seconds = np.array([when.astimezone(timezone.utc).timestamp()], dtype=np.float64)
+    seconds = np.array([when.astimezone(UTC).timestamp()], dtype=np.float64)
     azimuth, elevation = _positions(seconds, lat, lon)
     return SunPosition(float(azimuth[0]), float(elevation[0]))
 
@@ -115,6 +115,6 @@ def sun_positions(
     times: Sequence[datetime], lat: float, lon: float
 ) -> tuple[np.ndarray, np.ndarray]:
     seconds = np.array(
-        [t.astimezone(timezone.utc).timestamp() for t in times], dtype=np.float64
+        [t.astimezone(UTC).timestamp() for t in times], dtype=np.float64
     )
     return _positions(seconds, lat, lon)

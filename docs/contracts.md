@@ -33,3 +33,19 @@ stale.
 `weather.py` under `thermal/`. It does network IO, which breaks the purity rule
 that makes the thermal model easy to test. It lives at
 `server/shadeway/weather.py` instead. Everything else follows the scaffold.
+
+## Endpoints outside the frozen contract
+
+Two GET endpoints serve map furniture rather than routes, and are typed in the
+client by hand rather than generated:
+
+- `GET /api/amenities?bbox=w,s,e,n` — fountains, cooling sites and park
+  entrances in view.
+- `GET /api/buildings?bbox=w,s,e,n&max_features=N` — occluder footprints with
+  heights, tallest first, so the client can cast its own shadows. This is the
+  same building set the server's ray caster uses; serving it is what keeps the
+  shadows on screen and the shade in the routing from disagreeing.
+
+They are deliberately not in `api.py`: adding them would put viewport plumbing
+into the shape three tracks have to agree on. If either ever needs to carry a
+number the routing depends on, it moves into the contract first.
