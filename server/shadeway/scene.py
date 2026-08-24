@@ -67,3 +67,31 @@ class Scene:
         return self.building_tree.query(
             shapely.buffer(shapely.points(x, y), radius_m)
         )
+
+    def plant_crowns(
+        self,
+        xy: np.ndarray,
+        crown_radius_m: np.ndarray,
+        crown_base_m: np.ndarray,
+        crown_top_m: np.ndarray,
+        tau: np.ndarray,
+    ) -> None:
+        """Append planted crowns and bump `version`. The lazy kd-tree over
+        trunk positions is reset so the next shade query sees the newcomers;
+        callers must invalidate affected HorizonCache entries themselves."""
+        xy = np.asarray(xy, dtype=np.float64).reshape(-1, 2)
+        if not len(xy):
+            return
+        self.tree_xy = np.concatenate([self.tree_xy, xy])
+        self.tree_radius_m = np.concatenate(
+            [self.tree_radius_m, np.asarray(crown_radius_m, dtype=np.float32)]
+        )
+        self.crown_base_m = np.concatenate(
+            [self.crown_base_m, np.asarray(crown_base_m, dtype=np.float32)]
+        )
+        self.crown_top_m = np.concatenate(
+            [self.crown_top_m, np.asarray(crown_top_m, dtype=np.float32)]
+        )
+        self.tau = np.concatenate([self.tau, np.asarray(tau, dtype=np.float32)])
+        self._kdtree = None  # noqa: SLF001 — rebuilt lazily by occluder
+        self.version += 1

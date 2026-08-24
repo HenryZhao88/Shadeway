@@ -31,7 +31,14 @@ def side_name(bearing_deg: float, side: int) -> str:
 
 
 def build(graph, path, legs) -> list[Instruction]:
-    """legs is the list of LegStep already built by api.py, in walk order."""
+    """legs is the list of LegStep already built by api.py, in walk order.
+
+    Crossing legs sit between the two sides of a street (and between the two
+    streets at every junction), so narration compares each sidewalk leg with
+    the LAST SIDEWALK leg rather than its immediate predecessor — otherwise the
+    flagship cross card is unreachable and every intersection spawns a bogus
+    turn card.
+    """
     out: list[Instruction] = []
     if not legs:
         return out
@@ -40,7 +47,12 @@ def build(graph, path, legs) -> list[Instruction]:
         lon, lat = leg.geometry[-1 if end else 0]
         return LatLon(lat=lat, lon=lon)
 
-    first = legs[0]
+    def narrate(leg) -> tuple[str, int]:  # (street, side) of a sidewalk leg
+        return leg.street_name, int(leg.side)
+
+    first = next((leg for leg in legs if leg.kind != EdgeKind.CROSSING), None)
+    if first is None:  # degenerate: nothing but crossings
+        first = legs[0]
     start_side = side_name(float(graph.edge_bearing_deg[first.edge_id]), first.side)
     out.append(
         Instruction(
@@ -54,26 +66,27 @@ def build(graph, path, legs) -> list[Instruction]:
         )
     )
 
-    for previous, leg in zip(legs, legs[1:]):
+    last_sidewalk = first if first.kind != EdgeKind.CROSSING else None
+    for leg in legs:
+        if leg.kind == EdgeKind.CROSSING or leg is first:
+            continue  # a crossing is narrated by the sidewalk leg that follows it
+
         bearing = float(graph.edge_bearing_deg[leg.edge_id])
         this_side = side_name(bearing, leg.side)
 
-        if leg.kind == EdgeKind.CROSSING:
-            continue  # the crossing itself is narrated by the leg that follows it
-
-        crossed_street = (
-            previous.street_name == leg.street_name and previous.side != leg.side
-        )
-        if crossed_street and this_side:
+        if last_sidewalk is not None and (
+            last_sidewalk.street_name == leg.street_name
+            and last_sidewalk.side != leg.side
+        ):
             out.append(
                 Instruction(
                     type="cross",
                     at=at(leg),
                     text=f"Cross to the {this_side} of {leg.street_name}",
-                    why=_why(previous, leg),
+                    why=_why(last_sidewalk, leg),
                 )
             )
-        elif previous.street_name != leg.street_name:
+        elif last_sidewalk is None or last_sidewalk.street_name != leg.street_name:
             out.append(
                 Instruction(
                     type="turn",
@@ -83,9 +96,11 @@ def build(graph, path, legs) -> list[Instruction]:
                         if this_side
                         else f"Turn onto {leg.street_name}"
                     ),
-                    why=_why(previous, leg),
+                    why=_why(last_sidewalk, leg) if last_sidewalk is not None else None,
                 )
             )
+        # same street, same side: straight through an intersection — no card
+        last_sidewalk = leg
 
     out.append(Instruction(type="arrive", at=at(legs[-1], end=True), text="Arrive"))
     return out

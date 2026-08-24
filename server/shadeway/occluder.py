@@ -245,14 +245,20 @@ def canopy_horizon_profile(
     Solved directly rather than probed: a crown at along-track distance d is
     pierced while base <= eye + d·tan(h) <= top, i.e. for elevations up to
     atan((crown_top - eye)/d). One vectorised pass over nearby crowns.
+
+    Only crowns the ray actually passes through may contribute: `lateral` is
+    inf where the plan-view test fails, and unmasked candidates would poison
+    every bin — a tree 50 m to the side (or behind) would otherwise report a
+    ~90 degree canopy horizon in directions it cannot shade.
     """
     out = np.zeros(bins, dtype=np.uint8)
-    ids, along, _ = _crown_geometry_all_bins(scene, x, y, bins)
+    ids, along, lateral = _crown_geometry_all_bins(scene, x, y, bins)
     if not len(ids):
         return out
     highest_tan = (scene.crown_top_m[ids][:, None] - EYE_HEIGHT_M) / np.maximum(
         along, 0.01
     )
+    highest_tan = np.where(np.isfinite(lateral), highest_tan, -np.inf)
     best = np.degrees(np.arctan(highest_tan.max(axis=0)))
     return np.clip(np.rint(best), 0, 90).astype(np.uint8)
 

@@ -91,8 +91,17 @@ class WeatherClient:
 
     def _nearest(self, payload: dict, when: datetime) -> WeatherSnapshot:
         hourly = payload["hourly"]
+        # open-meteo stamps are naive strings in the timezone we requested
+        # ("America/New_York"), so the target must be converted into that
+        # zone before dropping tzinfo — a UTC or UTC+2 caller would otherwise
+        # match a stamp hours away from the instant they asked about.
+        from zoneinfo import ZoneInfo
+
+        local = ZoneInfo("America/New_York")
+        target = (
+            when.astimezone(local) if when.tzinfo is not None else when
+        ).replace(tzinfo=None)
         stamps = [datetime.fromisoformat(t) for t in hourly["time"]]
-        target = when.replace(tzinfo=None)
         index = min(range(len(stamps)), key=lambda i: abs(stamps[i] - target))
         return WeatherSnapshot(
             observed_iso=when,

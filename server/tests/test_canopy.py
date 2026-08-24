@@ -78,3 +78,27 @@ def test_canopy_profile_shape_and_dtype():
     scene = _crowns([(0.0, 10.0)], 0.35, base=2.0, top=20.0)
     profile = occluder.canopy_horizon_profile(scene, 0.0, 0.0)
     assert profile.shape == (72,) and profile.dtype == np.uint8
+
+
+def test_canopy_profile_peaks_only_toward_the_crown():
+    """One crown due north must raise bin 0 and nothing else — a crown to the
+    side or behind cannot shade a direction it is not in."""
+    scene = _crowns([(0.0, 10.0)], 0.35, radius=4.0, base=2.0, top=20.0)
+    profile = occluder.canopy_horizon_profile(scene, 0.0, 0.0)
+    assert profile[0] > 0, "bin 0 is due north, where the crown is"
+    assert profile[36] == 0, "bin 36 is due south; the crown is behind us"
+    far = [b for b in range(72) if 8 <= b % 72 <= 28]
+    assert all(profile[b] == 0 for b in far), (
+        "bins pointing away from the crown must stay clear"
+    )
+
+
+def test_a_crown_behind_the_point_never_shades_the_opposite_side():
+    scene = _crowns([(0.0, -12.0)], 0.35, radius=4.0, base=2.0, top=20.0)
+    profile = occluder.canopy_horizon_profile(scene, 0.0, 0.0)
+    # a 4 m crown 12 m away subtends about +/-19 deg, so bins 32..40 may graze
+    # it; everything on the far side of the compass must stay clear
+    clear = [b for b in range(72) if not 31 <= b <= 41]
+    assert all(profile[b] == 0 for b in clear), (
+        "a crown due south cannot shade the northern half of the sky"
+    )

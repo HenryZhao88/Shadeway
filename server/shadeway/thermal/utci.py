@@ -62,7 +62,7 @@ def _saturation_vapour_kpa(air_temp_c):
         (7.0229056 * np.power(10.0, -10)),
         (-1.8680009 * np.power(10.0, -13)),
     ]
-    es = 2.7150305 * np.log1p(tk)
+    es = 2.7150305 * np.log(tk)
     for count, i in enumerate(g):
         es = es + (i * np.power(tk, count - 2))
     es = np.exp(es) * 0.01  # hPa
@@ -436,7 +436,6 @@ def utci_c_vec(air_temp_c, tmrt_c, wind_10m_ms, relative_humidity_pct):
         + (2.47090539 * (10 ** (-4))) * delta_t_tr * pa * pa * pa * pa * pa
         + 0.00148348065 * pa * pa * pa * pa * pa * pa
     )
-    return utci_approx
 
 
 def utci_c(air_temp_c, tmrt_c, wind_10m_ms, relative_humidity_pct) -> float:

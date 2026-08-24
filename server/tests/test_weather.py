@@ -80,3 +80,19 @@ def test_network_failure_degrades_to_the_fallback_instead_of_500ing(monkeypatch)
     snapshot = WeatherClient().at(40.758, -73.985, WHEN)
     assert snapshot.source.startswith("fallback")
     assert snapshot.air_temp_c == FALLBACK_SNAPSHOT.air_temp_c
+
+
+UTC = timezone.utc
+# 19:00 UTC and 15:00 EDT are THE SAME INSTANT; the payload's stamps are NY-local
+SAME_INSTANT_AS_UTC = datetime(2025, 7, 22, 19, 0, tzinfo=UTC)
+
+
+def test_the_same_instant_in_any_timezone_returns_the_same_weather(client):
+    as_edt = client.at(40.758, -73.985, WHEN)
+    client._cache.clear()
+    client._calls.clear()
+    as_utc = client.at(40.758, -73.985, SAME_INSTANT_AS_UTC)
+    assert as_utc.air_temp_c == as_edt.air_temp_c, (
+        "an aware datetime must be converted into the payload's timezone before "
+        "matching it against open-meteo's local-time stamps"
+    )

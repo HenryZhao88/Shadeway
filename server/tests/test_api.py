@@ -93,3 +93,79 @@ def test_compute_ms_is_reported_so_we_can_see_regressions(client):
         client.post("/api/route", json=_body(client)).json()
     )
     assert parsed.compute_ms > 0
+
+
+def test_planting_a_tree_makes_the_street_cooler(client):
+    """The plant endpoint must actually add crowns to the scene — returning
+    'planted: 1' while changing nothing would silently fake the demo."""
+    import numpy as np
+
+    from shadeway.api import _state, _to_ll
+
+    state = _state()
+    ids = np.arange(0, 400, dtype=np.int64)
+
+    def max_open_f_sun():
+        best = 0.0
+        for azimuth in range(0, 360, 10):
+            values = state.horizon.f_sun(ids, float(azimuth), 20.0)
+            best = max(best, float(values.max()))
+        return best
+
+    assert max_open_f_sun() == 1.0, "fixture should have fully open sample points"
+
+    # find one open sample and aim the new crown straight at it
+    target = None
+    for sample_id in ids:
+        if state.horizon.f_sun(np.array([sample_id]), 0.0, 20.0)[0] == 1.0:
+            x, y = state.horizon.samples_xy[sample_id]
+            target = (sample_id, x, y)
+            break
+    assert target is not None
+    sample_id, sx, sy = target
+    px, py = sx, sy + 5.0  # 5 m north of the sample
+    lon, lat = _to_ll.transform(px, py)
+
+    version_before = state.scene.version
+    response = client.post(
+        "/api/scene/plant",
+        json={
+            "positions": [{"lat": float(lat), "lon": float(lon)}],
+            "species": "Gleditsia triacanthos",
+            # dbh 25 puts the crown band (base ~3.5 m) across the beam the tau
+            # profile samples at 30 deg (~4.0 m up at 5 m out); a 40 cm tree's
+            # crown base is above that beam and legitimately shades nothing
+            "dbh_cm": 25,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["planted"] == 1
+    assert body["scene_version"] == version_before + 1
+
+    after = float(state.horizon.f_sun(np.array([sample_id]), 0.0, 20.0)[0])
+    assert after < 1.0, "a crown planted 5 m north must intercept the beam"
+
+
+def test_departure_curve_never_emits_bare_nan_json(client, monkeypatch):
+    """A failed search used to produce a literal NaN in the JSON body, which
+    browser JSON.parse rejects outright."""
+    from shadeway import api
+
+    def fail(*a, **k):
+        return []
+
+    monkeypatch.setattr(api.timedep, "solve", fail)
+    response = client.get(
+        "/api/departure-curve",
+        params={
+            "origin_lat": 40.7536, "origin_lon": -73.9840,
+            "dest_lat": 40.7571, "dest_lon": -73.9800,
+            "from_iso": "2025-07-22T15:00:00-04:00",
+            "hours": 1,
+        },
+    )
+    assert response.status_code == 200
+    assert "NaN" not in response.text, "bare NaN is not valid JSON for browsers"
+    body = response.json()
+    assert body["points"] == []

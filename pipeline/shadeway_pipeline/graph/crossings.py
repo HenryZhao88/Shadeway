@@ -47,7 +47,6 @@ def add_crossings(nodes: pd.DataFrame, edges: pd.DataFrame, intersections=None):
 
     phys = endpoints["physical_id"].to_numpy()
     node_ids = endpoints["node_id"].to_numpy()
-    street_names = endpoints["street_name"].to_numpy()
 
     candidates: list[tuple[float, int, int]] = []
     for k, (i, j) in enumerate(pairs):

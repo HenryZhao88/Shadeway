@@ -297,34 +297,24 @@ def departure_curve(
         depart = from_iso + timedelta(minutes=15 * i)
         try:
             model = _cost_model((origin_lon, origin_lat), depart, 1.35)
-            paths = timedep.solve(graph, origin, destination, depart, model,
-                                  iterations=2)
+            paths = timedep.solve(graph, origin, destination, depart, model)
         except Exception:
             paths = []
-        if paths:
-            best = min(
-                paths, key=lambda p: p.heat_dm / max(p.duration_s / 60.0, 1e-6)
+        if not paths:
+            continue  # failed departures are dropped, never NaN — bare NaN is
+            # invalid JSON and would kill JSON.parse in the browser
+        best = min(paths, key=lambda p: p.heat_dm / max(p.duration_s / 60.0, 1e-6))
+        points.append(
+            DeparturePoint(
+                depart_iso=depart,
+                best_mean_feels_like_c=best.mean_feels_like_c,
+                best_duration_s=best.duration_s,
             )
-            points.append(
-                DeparturePoint(
-                    depart_iso=depart,
-                    best_mean_feels_like_c=best.mean_feels_like_c,
-                    best_duration_s=best.duration_s,
-                )
-            )
-        else:
-            points.append(
-                DeparturePoint(
-                    depart_iso=depart,
-                    best_mean_feels_like_c=float("nan"),
-                    best_duration_s=0.0,
-                )
-            )
-    valid = [
-        i for i, p in enumerate(points) if p.best_mean_feels_like_c == p.best_mean_feels_like_c
-    ]
+        )
     best_index = (
-        min(valid, key=lambda i: points[i].best_mean_feels_like_c) if valid else 0
+        min(range(len(points)), key=lambda i: points[i].best_mean_feels_like_c)
+        if points
+        else 0
     )
     return DepartureCurveResponse(points=points, now_index=0, best_index=best_index)
 
@@ -348,20 +338,35 @@ def amenities(bbox: str) -> list[dict[str, object]]:
 
 @app.post("/api/scene/plant", response_model=PlantResponse)
 def plant(req: PlantRequest) -> PlantResponse:
-    """Plant trees and invalidate exactly what they can shade (Task 13's
-    scene_edit logic, inline so the URL surface stays frozen)."""
-    from shapely.geometry import Point
+    """Plant trees and invalidate exactly what they can shade. The crowns go
+    into the live scene (scene_edit.py), so re-routing a corridor reflects the
+    new shade immediately — that is the whole point of the feature."""
+    from shadeway import scene_edit
 
     state = _state()
-    radius_m = 12.0  # a mature crown reaches ~12 m; beyond that it shades nothing new
-    invalidated = 0
-    tree_points = []
-    for position in req.positions:
-        x_m, y_m = _ll_to_xy(position.lat, position.lon)
-        invalidated += state.horizon.invalidate_within(x_m, y_m, radius_m)
-        tree_points.append((x_m, y_m))
+    positions = [_ll_to_xy(p.lat, p.lon) for p in req.positions]
+    if not positions:
+        return PlantResponse(planted=0, invalidated_samples=0,
+                             scene_version=state.scene.version)
+
+    geoms = [scene_edit.crown_geometry(req.species, req.dbh_cm)
+             for _ in positions]
+    radii, bases, tops, taus = (np.array(v) for v in zip(*geoms))
+    # invalidate before inserting: warm entries are recomputed lazily against
+    # the NEW scene on the next query
+    reach = float(radii.max()) + 12.0  # crown reach + sample-spacing margin
+    invalidated = sum(
+        state.horizon.invalidate_within(x, y, reach) for x, y in positions
+    )
+    state.scene.plant_crowns(
+        xy=np.array(positions),
+        crown_radius_m=radii,
+        crown_base_m=bases,
+        crown_top_m=tops,
+        tau=taus,
+    )
     return PlantResponse(
-        planted=len(req.positions),
+        planted=len(positions),
         invalidated_samples=invalidated,
         scene_version=state.scene.version,
     )
