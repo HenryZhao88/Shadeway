@@ -2,7 +2,6 @@
 # runs offline and only its output ships.
 data/cache
 data/fixtures
-data/nyc_mb
 
 # Built inside the image, from source.
 node_modules

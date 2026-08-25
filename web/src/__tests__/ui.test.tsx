@@ -400,6 +400,13 @@ describe('RouteTimeseries', () => {
     ).toBeInTheDocument();
   });
 
+  test('reports a failed curve and offers a retry', () => {
+    loadRoute({ timeseries: {}, timeseriesStatus: 'error' });
+    render(<RouteTimeseries />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/temporarily unavailable/i);
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
   test('plots both the average and the worst block', () => {
     loadRoute({ timeseries: { shadeway: TIMESERIES } });
     const { container } = render(<RouteTimeseries />);

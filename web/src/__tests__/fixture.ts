@@ -209,6 +209,7 @@ export const HEALTH = {
   n_edges: 138439,
   n_samples: 520741,
   scene_version: 1,
+  planting_enabled: true,
 };
 
 /** A fetch stand-in that answers every endpoint the client calls. */

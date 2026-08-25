@@ -104,7 +104,7 @@ after calibration:
 
 - connectivity 0.970 · both-sides 0 missing · samples tile exactly (520,741)
 - crossings ≤ 40 m ✓ · buildings n=44,793 (p99 124 m, max 435 m)
-- horizon cache: 520,741 samples × 144 B ≈ **75 MB** uint8
+- horizon cache: 520,741 samples × 216 B ≈ **113 MB** uint8, including canopy tau
 
 ## Instruction evidence — what we can and cannot prove
 
@@ -248,8 +248,8 @@ across all workers**:
 
 | scope | sample points | resident cache | measured warm |
 |---|---|---|---|
-| Manhattan | 520,741 | 225 MB | ~1 hour |
-| Manhattan + Brooklyn | 1,867,021 | 808 MB | **~4.3 hours** |
+| Manhattan | 520,741 | 113 MB | ~1 hour |
+| Manhattan + Brooklyn | 1,867,021 | 405 MB | **~4.3 hours** |
 
 The 72,000-sample benchmark that produced the rate: 592.6 s wall, 2,691 s CPU.
 
@@ -263,16 +263,12 @@ Serving cold is supported and degrades gracefully: the cache fills lazily per
 sample point, `/api/health` reports `warm_fraction`, and the client shows a
 banner until it reaches 1.0.
 
-**The resident cache is bigger than the design doc's ~69 MB.** Two reasons: the
-graph carries far more sample points than estimated (crossings are 116,045 of
-Manhattan's 138,439 edges), and the cache is not only the `uint8` horizon store
-— there is also a `float32` canopy-tau array of shape (n, 72), which is twice
-the size of the store. Manhattan: 75 MB store + 150 MB tau. Both boroughs:
-269 MB + 538 MB.
-
-Storing tau as `uint8` would cut those to 37 MB and 134 MB. Transmissivity is a
-number in [0, 1] cited to two decimal places at best, across a literature band
-of 0.08–0.38 with genus-level substitutions for a fifth of the canopy, so
-quantising to 1/255 ≈ 0.004 is far inside its own uncertainty. Not done here
-because it changes the on-disk cache format and invalidates every warmed
-`horizon.npz`.
+**The resident cache is still bigger than the design doc's ~69 MB.** The graph
+carries far more sample points than estimated (crossings are 116,045 of
+Manhattan's 138,439 edges). Each point now carries two 72-bin `uint8` horizon
+layers plus one 72-bin `uint8` canopy-transmissivity layer: 113 MB for Manhattan
+and 405 MB for both boroughs, including warm flags. Quantising tau from
+`float32` cuts the former allocations of 225 MB / 808 MB in half; its maximum
+error is below 0.002, far inside the source data's own uncertainty. New cache
+artifacts also fingerprint the source samples, buildings, and trees so a stale
+warm result cannot silently shadow rebuilt scene data.

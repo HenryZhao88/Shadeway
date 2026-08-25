@@ -37,6 +37,19 @@ from shadeway_pipeline.sources import trees as trees_src
 _to_ll = Transformer.from_crs(f"EPSG:{CRS_EPSG}", "EPSG:4326", always_xy=True)
 
 
+def _lonlat(x, y) -> tuple[np.ndarray, np.ndarray]:
+    """Vector transform, including pyproj's one-point compatibility edge."""
+    x_values = np.asarray(x, dtype=np.float64)
+    y_values = np.asarray(y, dtype=np.float64)
+    if len(x_values) == 1:
+        # Older pyproj mistakes a one-element ndarray for a scalar point and
+        # asks NumPy to coerce the whole array, which NumPy is removing.
+        lon, lat = _to_ll.transform(float(x_values[0]), float(y_values[0]))
+        return np.asarray([lon]), np.asarray([lat])
+    lon, lat = _to_ll.transform(x_values, y_values)
+    return np.asarray(lon), np.asarray(lat)
+
+
 def _stage(label: str, start: float) -> float:
     now = time.time()
     print(f"  {label:<28} {now - start:6.1f}s")
@@ -71,7 +84,7 @@ def build_tables(scope: Scope) -> dict[str, pa.Table]:
     amen = amenities_src.load(scope, sidewalk_geoms=list(edges_df["geometry"]))
     clock = _stage(f"amenities ({len(amen)})", clock)
 
-    lon, lat = _to_ll.transform(
+    lon, lat = _lonlat(
         nodes_df["x_m"].to_numpy(), nodes_df["y_m"].to_numpy()
     )
     nodes = pa.table(
@@ -137,7 +150,7 @@ def _amenities_table(amen) -> pa.Table:
         return AMENITIES.empty_table()
     ax = np.array([g.x for g in amen.geometry])
     ay = np.array([g.y for g in amen.geometry])
-    alon, alat = _to_ll.transform(ax, ay)
+    alon, alat = _lonlat(ax, ay)
     return pa.table(
         {
             "amenity_id": pa.array(np.arange(len(amen)), type=pa.uint32()),

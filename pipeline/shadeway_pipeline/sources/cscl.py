@@ -8,6 +8,7 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from pyproj import Transformer
 
 from shadeway_pipeline.config import (
     CACHE_DIR,
@@ -26,6 +27,7 @@ from shadeway_pipeline.sources.resolve import load_datasets
 WALKABLE_RW_TYPES = {"1", "6", "7", "10"}
 
 PREFETCHED = CACHE_DIR / "centerline.geojson"  # written by data/cache/fetch_nyc.sh
+_to_wgs84 = Transformer.from_crs(TARGET_CRS, "EPSG:4326", always_xy=True)
 
 
 def _download(scope: Scope) -> Path:
@@ -56,9 +58,18 @@ def load(scope: Scope) -> gpd.GeoDataFrame:
     frame = gpd.GeoDataFrame(frame, geometry="geometry").to_crs(TARGET_CRS)
     # drop geographically separate landmasses (see ISLAND_EXCLUSIONS_WGS84)
     mids = frame.geometry.interpolate(0.5, normalized=True)
-    mids_wgs84 = mids.to_crs("EPSG:4326")
+    mid_x = mids.x.to_numpy()
+    mid_y = mids.y.to_numpy()
+    if len(mids) == 1:
+        # GeoPandas passes a one-element ndarray into pyproj's scalar path;
+        # NumPy is removing that implicit array-to-scalar conversion.
+        lon, lat = _to_wgs84.transform(float(mid_x[0]), float(mid_y[0]))
+        mid_lon, mid_lat = np.asarray([lon]), np.asarray([lat])
+    else:
+        mid_lon, mid_lat = _to_wgs84.transform(mid_x, mid_y)
     keep_mask = ~np.array(
-        [_in_excluded_island(p.x, p.y) for p in mids_wgs84]
+        [_in_excluded_island(lon, lat) for lon, lat in zip(mid_lon, mid_lat)],
+        dtype=bool,
     )
     frame = frame[keep_mask]
 

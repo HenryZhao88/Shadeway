@@ -59,6 +59,27 @@ def run_checks(tables: dict[str, pa.Table]) -> list[Check]:
     nodes = tables["nodes"].to_pydict()
     samples = tables["samples"]
 
+    # Schema equality says nothing about whether a build contains a city. An
+    # empty set of six correctly typed tables used to pass every hard check
+    # because vacuous `all()` calls and a connectivity default of 1.0 all read
+    # as success.
+    row_counts = {
+        "nodes": len(nodes["node_id"]),
+        "edges": len(edges["edge_id"]),
+        "samples": samples.num_rows,
+    }
+    network_nonempty = all(row_counts.values())
+    checks.append(
+        Check(
+            "network_nonempty",
+            network_nonempty,
+            "hard",
+            " · ".join(f"{name}={count}" for name, count in row_counts.items()),
+        )
+    )
+    if not network_nonempty:
+        return checks
+
     # --- connectivity ------------------------------------------------------
     parent = {int(n): int(n) for n in nodes["node_id"]}
 
@@ -96,7 +117,7 @@ def run_checks(tables: dict[str, pa.Table]) -> list[Check]:
     for borough, roots in sorted(per_borough.items()):
         total = sum(roots.values())
         fraction = max(roots.values()) / total if total else 0.0
-        if fraction < worst_fraction:
+        if fraction <= worst_fraction:
             worst_name, worst_fraction = borough, fraction
     detail = " · ".join(
         f"{borough}: {max(roots.values()) / sum(roots.values()):.3f} "
@@ -240,7 +261,8 @@ def run_checks(tables: dict[str, pa.Table]) -> list[Check]:
     )
 
     # --- soft: horizon cache footprint ------------------------------------
-    cache_bytes = samples.num_rows * AZIMUTH_BINS * HORIZON_LAYERS
+    # Two uint8 horizon layers plus one uint8 canopy-transmissivity layer.
+    cache_bytes = samples.num_rows * AZIMUTH_BINS * (HORIZON_LAYERS + 1)
     checks.append(
         Check(
             "horizon_cache_ram",

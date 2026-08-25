@@ -29,6 +29,17 @@ def test_a_disconnected_graph_fails_hard():
     assert checks["connectivity"].level == "hard"
 
 
+def test_an_empty_but_schema_correct_build_fails_hard():
+    from shadeway_contracts.tables import ALL_TABLES
+
+    tables = {name: schema.empty_table() for name, schema in ALL_TABLES.items()}
+    checks = validate.run_checks(tables)
+    nonempty = _named(checks, "network_nonempty")
+    assert not nonempty.ok
+    assert nonempty.level == "hard"
+    assert validate.exit_code(checks) == 1
+
+
 def test_a_missing_sidewalk_side_fails_hard():
     city = build_fixture_city()
     edges = city["edges"]
@@ -63,13 +74,19 @@ def test_connectivity_is_judged_per_borough_not_across_the_scope():
 
     tables = build_fixture_city()
     nodes = tables["nodes"].to_pydict()
-    # relabel half the nodes as a second borough without touching any edge, so
-    # the graph is unchanged and only the labelling differs
+    # Relabel half the nodes and remove every cross-half edge. Scope-wide this
+    # is two components of roughly 50%, while each borough remains connected.
     half = len(nodes["node_id"]) // 2
     nodes["borough"] = ["1"] * half + ["3"] * (len(nodes["node_id"]) - half)
     tables["nodes"] = pa.table(nodes, schema=NODES)
+    edges = tables["edges"]
+    u = edges.column("u").to_pylist()
+    v = edges.column("v").to_pylist()
+    keep = [i for i, (a, b) in enumerate(zip(u, v)) if (a < half) == (b < half)]
+    tables["edges"] = edges.take(keep)
 
     check = _named(validate.run_checks(tables), "connectivity")
+    assert check.ok
     assert "1:" in check.detail and "3:" in check.detail
 
 

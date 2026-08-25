@@ -31,6 +31,8 @@ const PAD = { top: 14, right: 14, bottom: 22, left: 34 };
 
 export default function RouteTimeseries() {
   const series = useStore((s) => s.timeseries);
+  const status = useStore((s) => s.timeseriesStatus);
+  const retry = useStore((s) => s.fetchTimeseries);
   const chosenId = useStore(chosenRouteId);
   const departAt = useStore((s) => s.departAt);
   const setScrubAt = useStore((s) => s.setScrubAt);
@@ -45,10 +47,25 @@ export default function RouteTimeseries() {
     return (
       <section className="block">
         <p className="eyebrow">this route, hour by hour</p>
-        <p className="hint" style={{ marginTop: 10 }}>
-          <span className="spinner" aria-hidden="true" /> Walking the route
-          forward through the afternoon…
-        </p>
+        {status === 'error' || status === 'ready' ? (
+          <>
+            <p className="hint" role="alert" style={{ marginTop: 10 }}>
+              The hour-by-hour curve is temporarily unavailable.
+            </p>
+            <button
+              type="button"
+              className="table-toggle"
+              onClick={() => void retry()}
+            >
+              Try again
+            </button>
+          </>
+        ) : (
+          <p className="hint" style={{ marginTop: 10 }}>
+            <span className="spinner" aria-hidden="true" /> Walking the route
+            forward through the afternoon…
+          </p>
+        )}
       </section>
     );
   }

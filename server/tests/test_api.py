@@ -16,6 +16,7 @@ def client(tmp_path_factory):
     data = tmp_path_factory.mktemp("api")
     write_fixture_city(data)
     os.environ["SHADEWAY_DATA"] = str(data)
+    os.environ["SHADEWAY_ENABLE_PLANTING"] = "1"
     from shadeway.api import app
 
     return TestClient(app)
@@ -38,6 +39,31 @@ def test_health_reports_the_real_scene(client):
     payload = client.get("/api/health").json()
     assert payload["status"] == "ok"
     assert payload["scene"] != "stub"
+    assert payload["planting_enabled"] is True
+
+
+def test_planting_can_be_disabled_for_public_deployments(client, monkeypatch):
+    monkeypatch.setenv("SHADEWAY_ENABLE_PLANTING", "0")
+    response = client.post(
+        "/api/scene/plant",
+        json={
+            "positions": [{"lat": 40.75, "lon": -73.98}],
+            "species": "Gleditsia triacanthos",
+        },
+    )
+    assert response.status_code == 403
+    assert client.get("/api/health").json()["planting_enabled"] is False
+
+
+def test_one_plant_request_is_bounded(client):
+    response = client.post(
+        "/api/scene/plant",
+        json={
+            "positions": [{"lat": 40.75, "lon": -73.98}] * 41,
+            "species": "Gleditsia triacanthos",
+        },
+    )
+    assert response.status_code == 422
 
 
 def test_route_returns_a_contract_valid_response(client):
@@ -82,10 +108,67 @@ def test_timeseries_returns_the_whole_curve_in_one_call(client):
     route_id = parsed.chosen_route_id
     response = client.get(
         f"/api/route/{route_id}/timeseries",
-        params={"depart_iso": "2025-07-22T15:00:00-04:00", "step_minutes": 5},
+        params={
+            "depart_iso": "2025-07-22T15:00:00-04:00",
+            "step_minutes": 5,
+            "request_id": parsed.request_id,
+        },
     )
     series = TimeseriesResponse.model_validate(response.json())
     assert len(series.points) >= 2
+
+
+def test_timeseries_first_point_matches_the_route_it_describes(client):
+    parsed = RouteResponse.model_validate(
+        client.post("/api/route", json=_body(client)).json()
+    )
+    for route_id, route in parsed.routes.items():
+        series = TimeseriesResponse.model_validate(
+            client.get(
+                f"/api/route/{route_id}/timeseries",
+                params={
+                    "depart_iso": route.depart_iso.isoformat(),
+                    "step_minutes": 15,
+                    "hours": 1,
+                    "request_id": parsed.request_id,
+                },
+            ).json()
+        )
+        assert series.points[0].mean_feels_like_c == pytest.approx(
+            route.feels_like_c.mean_c
+        )
+        assert series.points[0].sun_fraction == pytest.approx(
+            route.exposure.sun_fraction
+        )
+
+
+def test_timeseries_cache_is_namespaced_by_request(client):
+    from shadeway.api import _recalled, _state
+
+    first_body = _body(client)
+    first = RouteResponse.model_validate(
+        client.post("/api/route", json=first_body).json()
+    )
+    state = _state()
+    lon, lat = state.graph.node_lonlat[2]
+    second_body = first_body | {"origin": {"lat": float(lat), "lon": float(lon)}}
+    second = RouteResponse.model_validate(
+        client.post("/api/route", json=second_body).json()
+    )
+
+    assert first.request_id != second.request_id
+    first_cached = _recalled(first.chosen_route_id, first.request_id)
+    second_cached = _recalled(second.chosen_route_id, second.request_id)
+    assert first_cached is not None and second_cached is not None
+    assert first_cached[2].origin != second_cached[2].origin
+    missing = client.get(
+        f"/api/route/{first.chosen_route_id}/timeseries",
+        params={
+            "depart_iso": first.computed_at.isoformat(),
+            "request_id": "not-a-real-request",
+        },
+    )
+    assert missing.status_code == 404
 
 
 def test_compute_ms_is_reported_so_we_can_see_regressions(client):
@@ -147,6 +230,33 @@ def test_planting_a_tree_makes_the_street_cooler(client):
     assert after < 1.0, "a crown planted 5 m north must intercept the beam"
 
 
+def test_planting_invalidates_the_full_ray_reach(client, monkeypatch):
+    from shadeway import occluder, scene_edit
+    from shadeway.api import _state
+
+    state = _state()
+    lon, lat = state.graph.node_lonlat[0]
+    observed: list[float] = []
+    monkeypatch.setattr(
+        state.horizon,
+        "invalidate_within",
+        lambda _x, _y, radius: observed.append(radius) or 0,
+    )
+    monkeypatch.setattr(state.scene, "plant_crowns", lambda **_kwargs: None)
+
+    response = client.post(
+        "/api/scene/plant",
+        json={
+            "positions": [{"lat": float(lat), "lon": float(lon)}],
+            "species": "Gleditsia triacanthos",
+            "dbh_cm": 25,
+        },
+    )
+    crown_radius, *_ = scene_edit.crown_geometry("Gleditsia triacanthos", 25)
+    assert response.status_code == 200
+    assert observed == [pytest.approx(occluder.RAY_CAP_M + crown_radius)]
+
+
 def test_departure_curve_never_emits_bare_nan_json(client, monkeypatch):
     """A failed search used to produce a literal NaN in the JSON body, which
     browser JSON.parse rejects outright."""
@@ -190,6 +300,20 @@ def test_buildings_endpoint_serves_the_occluders_the_router_uses(client):
     for building in payload["buildings"]:
         assert building["height_m"] > 0
         assert len(building["polygon"]) >= 3
+
+
+def test_large_api_responses_are_compressed(client):
+    from shadeway.api import _state
+
+    state = _state()
+    lon, lat = state.graph.node_lonlat[0]
+    response = client.get(
+        "/api/buildings",
+        params={"bbox": f"{lon - 0.05},{lat - 0.05},{lon + 0.05},{lat + 0.05}"},
+        headers={"Accept-Encoding": "gzip"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-encoding"] == "gzip"
 
 
 def test_buildings_come_back_tallest_first(client):

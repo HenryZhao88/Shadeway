@@ -1,8 +1,8 @@
 """Pre-warm the horizon cache. CALLED FROM THE BUILD, not from the server.
 
 It walks every sample point through the identical code path a lazy query would.
-`scripts/build_artifact.py` invokes this during the Vercel build and saves the
-result; the deployed server then mmaps that file and never warms anything.
+The command saves the result beside the built city; the deployed server loads
+that file into writable memory and never warms anything.
 
 Nothing in the architecture depends on WHEN it runs — that is exactly why moving
 it to build time was a free win. See 05-deploy.md.
@@ -34,12 +34,14 @@ def _warm_slice(args: tuple[str, np.ndarray]) -> tuple[np.ndarray, np.ndarray, n
     n = len(xy)
     opaque = np.zeros((n, AZIMUTH_BINS), dtype=np.uint8)
     canopy = np.zeros((n, AZIMUTH_BINS), dtype=np.uint8)
-    tau = np.ones((n, AZIMUTH_BINS), dtype=np.float32)
+    tau = np.full((n, AZIMUTH_BINS), 255, dtype=np.uint8)
     for i in range(n):
         x, y = float(xy[i][0]), float(xy[i][1])
         opaque[i] = occluder.building_horizon_profile(scene, x, y)
         canopy[i] = occluder.canopy_horizon_profile(scene, x, y)
-        tau[i] = occluder.tau_profile(scene, x, y)
+        tau[i] = np.rint(occluder.tau_profile(scene, x, y) * 255.0).astype(
+            np.uint8
+        )
     return opaque, canopy, tau
 
 
@@ -49,11 +51,11 @@ def warm_parallel(
     workers: int | None = None,
     chunk_size: int = 8000,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Returns (store uint8[2][n][72], canopy_tau float32[n][72])."""
+    """Returns (store uint8[2][n][72], canopy_tau uint8[n][72])."""
     workers = workers or max(1, cpu_count() - 1)
     n = len(samples_xy)
     store = np.zeros((2, n, AZIMUTH_BINS), dtype=np.uint8)
-    canopy_tau = np.ones((n, AZIMUTH_BINS), dtype=np.float32)
+    canopy_tau = np.full((n, AZIMUTH_BINS), 255, dtype=np.uint8)
 
     chunks = [
         (str(data_dir), samples_xy[s : s + chunk_size])
@@ -86,7 +88,7 @@ def main() -> None:
     sample_xy = graph.sample_xy
     if args.limit:
         sample_xy = sample_xy[: args.limit]
-    nbytes = len(sample_xy) * AZIMUTH_BINS * 2
+    nbytes = len(sample_xy) * AZIMUTH_BINS * 3
     print(
         f"{len(sample_xy)} of {graph.n_samples} samples, "
         f"{nbytes / 1e6:.0f} MB of uint8, "
@@ -102,7 +104,14 @@ def main() -> None:
     )
 
     if args.out:
-        np.savez_compressed(args.out, store=store, tau=canopy_tau)
+        from shadeway.horizon import source_fingerprint
+
+        np.savez_compressed(
+            args.out,
+            store=store,
+            tau=canopy_tau,
+            fingerprint=np.asarray(source_fingerprint(args.data)),
+        )
         print(f"saved to {args.out}")
 
 

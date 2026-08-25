@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import pytest
 
-from shadeway.cost import EdgeCostModel
+from shadeway.cost import EdgeCostModel, canopy_fraction
 from shadeway.horizon import HorizonCache
 from shadeway.router.graph import Graph
 from shadeway.scene import Scene
@@ -73,6 +73,13 @@ def test_f_sun_and_svf_are_reported_for_the_ui(model):
     result = cost.traverse(0, NOON)
     assert 0.0 <= result.mean_f_sun <= 1.0
     assert 0.0 <= result.mean_svf <= 1.0
+
+
+def test_canopy_is_classified_before_edge_sun_is_averaged():
+    # Both arrays average to 0.5. Only the second is transmissive canopy; the
+    # first is a mix of opaque building shade and open sky.
+    assert canopy_fraction(np.array([0.0, 1.0])) == 0.0
+    assert canopy_fraction(np.array([0.38, 0.62])) == 1.0
 
 
 def test_the_router_never_needs_to_import_thermal():

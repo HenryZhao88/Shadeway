@@ -1,10 +1,10 @@
 # shadeway, as one container: the API and the client it serves.
 #
 # Deliberately NOT serverless. The server holds a graph, a scene and a horizon
-# cache resident — 225 MB for Manhattan — and answers a route in ~400 ms of
+# cache resident — 113 MB for Manhattan — and answers a route in ~400 ms of
 # Python. That is a process, not a function: scale-to-zero would pay the load
-# cost on every cold request, and the planting feature mutates scene state that
-# a function would forget between calls.
+# cost on every cold request. The local planting demo mutates scene state that
+# a function would forget between calls; public images disable it by default.
 #
 # The pipeline is NOT in this image. It downloads gigabytes of NYC open data and
 # runs offline on a laptop; what ships is its output. Build the data first:
@@ -16,7 +16,7 @@
 # See docs/deploy.md for free hosts and their memory limits.
 
 # ---------------------------------------------------------------- web build
-FROM node:20-slim AS web
+FROM node:20.19-slim AS web
 
 WORKDIR /build
 COPY package.json package-lock.json ./
@@ -38,7 +38,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     SHADEWAY_DATA=/app/data/nyc \
-    SHADEWAY_WEB_DIST=/app/web/dist
+    SHADEWAY_WEB_DIST=/app/web/dist \
+    SHADEWAY_ENABLE_PLANTING=0
 
 WORKDIR /app
 
@@ -57,7 +58,8 @@ RUN pip install --no-deps ./contracts ./server
 # horizon.npz. Serving without the cache works — it fills lazily and
 # /api/health reports warm_fraction — but the first route through each block
 # pays for its own ray casting, so bake a warmed one in for anything public.
-COPY data/nyc ./data/nyc
+ARG CITY_DIR=data/nyc
+COPY ${CITY_DIR} ./data/nyc
 COPY --from=web /build/web/dist ./web/dist
 
 # Free hosts inject the port. Default to 8000 for `docker run` on a laptop.
@@ -68,7 +70,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
   CMD curl -fsS "http://localhost:${PORT}/api/health" || exit 1
 
 # One worker on purpose. Each worker would hold its own copy of the horizon
-# cache, so two workers cost 450 MB to serve the same read-mostly arrays. The
+# cache, so two workers cost 226 MB to serve the same read-mostly arrays. The
 # route handler is sync, so Starlette already runs it in a thread pool and
 # concurrent requests overlap wherever numpy releases the GIL.
 CMD ["sh", "-c", "exec uvicorn shadeway.api:app --host 0.0.0.0 --port ${PORT} --workers 1"]

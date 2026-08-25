@@ -98,6 +98,7 @@ interface State {
   overrideRouteId: string | null;
 
   timeseries: Record<string, TimeseriesResponse>;
+  timeseriesStatus: Status;
   departure: DepartureCurveResponse | null;
   departureStatus: Status;
 
@@ -125,6 +126,7 @@ interface State {
   toggleAmenities: () => void;
 
   fetchRoute: () => Promise<void>;
+  fetchTimeseries: () => Promise<void>;
   fetchDeparture: () => Promise<void>;
   /** Resolves false when the fetch failed, so the caller can retry. */
   fetchViewportData: (bbox: Bbox) => Promise<boolean>;
@@ -139,6 +141,7 @@ const REROUTE_DEBOUNCE_MS = 150;
 
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 let routeAbort: AbortController | undefined;
+let timeseriesAbort: AbortController | undefined;
 let departureAbort: AbortController | undefined;
 let viewportAbort: AbortController | undefined;
 
@@ -176,6 +179,7 @@ export const useStore = create<State>((set, get) => ({
   overrideRouteId: null,
 
   timeseries: {},
+  timeseriesStatus: 'idle',
   departure: null,
   departureStatus: 'idle',
 
@@ -216,12 +220,19 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setProfile: (key) => {
-    // The heat profile is a display choice, not a re-route: the pareto frontier
-    // we already hold contains the answer. But the server also applies the
-    // profile when picking `chosen_route_id`, so ask it again — it is cheap and
-    // it keeps one authority over which point is chosen.
-    set({ profileKey: key, overrideRouteId: null });
-    void get().fetchRoute();
+    // The server already returned the whole Pareto frontier. Reapplying its
+    // small, deterministic selection formula locally avoids another route plus
+    // 16 background departure searches for a pure preference change.
+    set((state) => ({
+      profileKey: key,
+      overrideRouteId: null,
+      route: state.route
+        ? {
+            ...state.route,
+            chosen_route_id: chooseForProfile(state.route, PROFILES[key]!),
+          }
+        : null,
+    }));
   },
 
   setWalkSpeed: (ms) => {
@@ -236,7 +247,9 @@ export const useStore = create<State>((set, get) => ({
 
   fetchRoute: async () => {
     routeAbort?.abort();
+    timeseriesAbort?.abort();
     routeAbort = new AbortController();
+    const signal = routeAbort.signal;
     const { origin, destination, departAt, profileKey, walkSpeedMs } = get();
     const profile = PROFILES[profileKey]!;
     set({ routeStatus: 'loading', routeError: null });
@@ -250,8 +263,9 @@ export const useStore = create<State>((set, get) => ({
           minutes_per_degree: profile.minutes_per_degree,
         },
         walkSpeedMs,
-        signal: routeAbort.signal,
+        signal,
       });
+      if (signal.aborted) return;
       set((state) => ({
         route: response,
         routeStatus: 'ready',
@@ -259,8 +273,9 @@ export const useStore = create<State>((set, get) => ({
         routeGeneration: state.routeGeneration + 1,
         // route ids are labels and get reused, so the old curves are stale
         timeseries: {},
+        timeseriesStatus: 'loading',
       }));
-      void loadTimeseries(response, departAt, walkSpeedMs, set);
+      void get().fetchTimeseries();
       void get().fetchDeparture();
     } catch (error) {
       if (aborted(error)) return;
@@ -268,9 +283,26 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  fetchTimeseries: async () => {
+    const { route, departAt, walkSpeedMs } = get();
+    if (!route) return;
+    timeseriesAbort?.abort();
+    timeseriesAbort = new AbortController();
+    const signal = timeseriesAbort.signal;
+    const requestId = route.request_id;
+    set({ timeseriesStatus: 'loading' });
+    const next = await loadTimeseries(route, departAt, walkSpeedMs, signal);
+    if (signal.aborted || get().route?.request_id !== requestId) return;
+    set({
+      timeseries: next,
+      timeseriesStatus: Object.keys(next).length ? 'ready' : 'error',
+    });
+  },
+
   fetchDeparture: async () => {
     departureAbort?.abort();
     departureAbort = new AbortController();
+    const signal = departureAbort.signal;
     const { origin, destination, departAt, walkSpeedMs } = get();
     set({ departureStatus: 'loading' });
     try {
@@ -280,8 +312,9 @@ export const useStore = create<State>((set, get) => ({
         departAt,
         walkSpeedMs,
         4,
-        departureAbort.signal,
+        signal,
       );
+      if (signal.aborted) return;
       set({ departure: response, departureStatus: 'ready' });
     } catch (error) {
       if (aborted(error)) return;
@@ -298,6 +331,7 @@ export const useStore = create<State>((set, get) => ({
         getAmenities(bbox, signal),
         getBuildings(bbox, 2600, signal),
       ]);
+      if (signal.aborted) return false;
       set({
         amenities,
         buildings: buildings.buildings,
@@ -351,13 +385,23 @@ async function loadTimeseries(
   response: RouteResponse,
   departAt: Date,
   walkSpeedMs: number,
-  set: (partial: Partial<State> | ((state: State) => Partial<State>)) => void,
-): Promise<void> {
+  signal: AbortSignal,
+): Promise<Record<string, TimeseriesResponse>> {
   const ids = Object.keys(response.routes);
   const results = await Promise.all(
     ids.map(async (id) => {
       try {
-        return [id, await getTimeseries(id, departAt, walkSpeedMs)] as const;
+        return [
+          id,
+          await getTimeseries(
+            id,
+            response.request_id,
+            departAt,
+            walkSpeedMs,
+            6,
+            signal,
+          ),
+        ] as const;
       } catch {
         return [id, null] as const;
       }
@@ -365,7 +409,31 @@ async function loadTimeseries(
   );
   const next: Record<string, TimeseriesResponse> = {};
   for (const [id, series] of results) if (series) next[id] = series;
-  set({ timeseries: next });
+  return next;
+}
+
+
+function chooseForProfile(
+  response: RouteResponse,
+  profile: HeatProfile,
+): string {
+  const frontier = [...response.frontier].sort(
+    (a, b) => a.duration_s - b.duration_s,
+  );
+  const baseline = frontier[0];
+  if (!baseline) return response.chosen_route_id;
+  const budgetS = profile.minutes_per_degree * 60;
+  return frontier.reduce((best, point) => {
+    const score =
+      point.duration_s -
+      baseline.duration_s -
+      budgetS * (baseline.mean_feels_like_c - point.mean_feels_like_c);
+    const bestScore =
+      best.duration_s -
+      baseline.duration_s -
+      budgetS * (baseline.mean_feels_like_c - best.mean_feels_like_c);
+    return score < bestScore ? point : best;
+  }, baseline).route_id;
 }
 
 /** The route the interface is showing: the user's pick if they made one, the

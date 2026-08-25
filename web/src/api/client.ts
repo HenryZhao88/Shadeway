@@ -57,6 +57,7 @@ export interface Health {
   n_edges: number;
   n_samples: number;
   scene_version: number;
+  planting_enabled: boolean;
 }
 
 export class ApiError extends Error {
@@ -129,12 +130,14 @@ export function postRoute(args: RouteArgs) {
 
 export function getTimeseries(
   routeId: string,
+  requestId: string,
   departAt: Date,
   walkSpeedMs: number,
   hours = 6,
   signal?: AbortSignal,
 ) {
   const query = new URLSearchParams({
+    request_id: requestId,
     depart_iso: departAt.toISOString(),
     // 15-minute resolution over six hours: fine enough to see the afternoon
     // turn over, coarse enough to stay one cheap call.

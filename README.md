@@ -31,13 +31,14 @@ vehicle bridges, so no route runs between them. `make validate` checks
 connectivity per borough for exactly this reason.
 
 Rebuilding only the amenities table, against a graph you already have — this is
-the one you want, because a full `make data` renumbers sample ids and throws away
+the one you want, because a full `make data` renumbers sample ids and invalidates
 a warm `horizon.npz`:
 
     make amenities
 
-Ship it — one container serving the API and the client, no keys, ~593 MB
-resident. Free-host options and the numbers behind them: `docs/deploy.md`.
+Ship it — one container serving the API and the client, no keys. Its Manhattan
+horizon allocation is 113 MB; measured whole-process budgets and free-host
+options are in `docs/deploy.md`.
 
     make docker
     make docker-run                        # http://localhost:8000
@@ -111,13 +112,13 @@ of that design — but the number is the number.
 **The deployment is plain HTTP on an IP address.** Fine for a demo, not for
 sharing widely. Wants a domain and Caddy or certbot.
 
-**`tau` is stored as `float32`** — 150 MB of the 225 MB Manhattan cache, twice
-the size of the `uint8` horizon store it accompanies. Quantising to `uint8`
-loses nothing real (transmissivity is cited to two decimal places at best,
-across a literature band of 0.08–0.38) and would bring the container to
-~480 MB, which is what makes a 512 MB free tier viable. It changes the
-on-disk cache format and invalidates every warmed `horizon.npz`, so it is a
-deliberate change rather than a default.
+**The horizon cache is now source-identified and compact.** Canopy
+transmissivity is quantised to `uint8` (maximum error below 0.002), cutting the
+Manhattan cache allocation from 225 MB to 113 MB. New `horizon.npz` files carry
+a fingerprint of every shade input and stale artifacts are rejected. The
+loader can still read the existing legacy artifact when its timestamps prove
+it follows the source parquet, so this change does not force an hour-long
+re-warm immediately.
 
 **The Hugging Face path is built but never exercised end to end.**
 `deploy/push-to-hf.sh` and the Space card are written and the amd64 image is

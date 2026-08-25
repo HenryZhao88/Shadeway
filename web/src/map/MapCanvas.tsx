@@ -40,6 +40,7 @@ interface ViewState {
 /** Refetching viewport data on every frame of a pan would hammer the server for
  *  no visual gain, so wait for the camera to settle. */
 const VIEW_SETTLE_MS = 260;
+const MAX_VIEW_RETRIES = 5;
 
 export default function MapCanvas() {
   const [viewState, setViewState] = useState<ViewState>({ ...INITIAL_VIEW });
@@ -51,6 +52,8 @@ export default function MapCanvas() {
   } | null>(null);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastBbox = useRef<string>('');
+  const retryBbox = useRef<string>('');
+  const retryCount = useRef(0);
 
   const scrubAt = useStore((s) => s.scrubAt);
   const route = useStore((s) => s.route);
@@ -88,10 +91,21 @@ export default function MapCanvas() {
         const box = bboxFor(next);
         const key = box.map((v) => v.toFixed(3)).join(',');
         if (key === lastBbox.current) return;
+        if (key !== retryBbox.current) {
+          retryBbox.current = key;
+          retryCount.current = 0;
+        }
         lastBbox.current = key;
         void fetchViewportData(box).then((ok) => {
+          if (ok) {
+            retryCount.current = 0;
+            return;
+          }
           // forget a bbox we failed on, so the next tick tries it again
-          if (!ok && lastBbox.current === key) lastBbox.current = '';
+          if (lastBbox.current === key) {
+            lastBbox.current = '';
+            retryCount.current += 1;
+          }
         });
       }, VIEW_SETTLE_MS);
     },
@@ -104,14 +118,17 @@ export default function MapCanvas() {
     requestViewportData(viewState);
     const onResize = () => requestViewportData(viewState);
     window.addEventListener('resize', onResize);
-    // A slow-starting server is the common first-load failure, so keep asking
-    // for a little while rather than showing an empty city until someone pans.
+    // A slow-starting server is the common first-load failure. Retry a bounded
+    // number of times; a permanent failure must not poll the endpoint forever.
     const retry = setInterval(() => {
-      if (!lastBbox.current) requestViewportData(viewState);
+      if (!lastBbox.current && retryCount.current < MAX_VIEW_RETRIES) {
+        requestViewportData(viewState);
+      }
     }, 2000);
     return () => {
       window.removeEventListener('resize', onResize);
       clearInterval(retry);
+      clearTimeout(settleTimer.current);
     };
   }, [requestViewportData, viewState]);
 

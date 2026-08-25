@@ -21,6 +21,12 @@ from shadeway_contracts.api import WeatherSnapshot
 CROSSING_PENALTY_S = 20.0  # signal wait + curb; tune once you see real routes
 
 
+def canopy_fraction(f_sun: np.ndarray) -> float:
+    """Share of samples with a transmissive, rather than binary, direct beam."""
+    values = np.asarray(f_sun)
+    return float(np.mean((values > 0.0) & (values < 1.0))) if len(values) else 0.0
+
+
 @dataclass(frozen=True)
 class EdgeCost:
     duration_s: float
@@ -29,6 +35,10 @@ class EdgeCost:
     mean_f_sun: float
     mean_svf: float
     mean_tmrt_c: float
+    # Fraction of sample points under transmissive canopy. This must be
+    # classified before f_sun is averaged: an edge that is half open and half
+    # behind a building also has mean_f_sun=0.5, but contains no canopy.
+    mean_canopy_fraction: float = 0.0
 
 
 class EdgeCostModel:
@@ -88,7 +98,11 @@ class EdgeCostModel:
         inside one minute, and this is called thousands of times per search."""
         key = int(when.timestamp() // 60)
         if key not in self._sun_cache:
-            position = sun_position(when, self.lat, self.lon)
+            # The cache key defines the precision, so the calculation must use
+            # the same canonical instant. Otherwise whichever edge first asks
+            # about a minute determines the result for every later caller.
+            minute = when.replace(second=0, microsecond=0)
+            position = sun_position(minute, self.lat, self.lon)
             self._sun_cache[key] = (position.azimuth_deg, position.elevation_deg)
         return self._sun_cache[key]
 
@@ -142,4 +156,5 @@ class EdgeCostModel:
             mean_f_sun=float(np.mean(f_sun)),
             mean_svf=float(np.mean(svf)),
             mean_tmrt_c=float(np.mean(tmrt_values)),
+            mean_canopy_fraction=canopy_fraction(f_sun),
         )

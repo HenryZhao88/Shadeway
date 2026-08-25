@@ -213,6 +213,16 @@ input[type="range"]::-moz-range-thumb {
   position: relative;
   overflow: hidden;
 }
+.map-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  color: var(--ink-3);
+  background: var(--ground);
+  font: 12px var(--data);
+}
 
 .scrubber {
   grid-area: scrub;

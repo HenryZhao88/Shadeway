@@ -17,6 +17,7 @@ export default function MapTools() {
   const plantedCount = useStore((s) => s.plantedCount);
   const lastPlant = useStore((s) => s.lastPlant);
   const buildingsTruncated = useStore((s) => s.buildingsTruncated);
+  const plantingEnabled = useStore((s) => s.health?.planting_enabled ?? false);
 
   return (
     <>
@@ -29,16 +30,18 @@ export default function MapTools() {
         >
           {showAmenities ? 'Hide water & shade' : 'Show water & shade'}
         </button>
-        <button
-          type="button"
-          className="ghost-button"
-          aria-pressed={pickMode === 'plant'}
-          onClick={() => setPickMode(pickMode === 'plant' ? 'none' : 'plant')}
-        >
-          {pickMode === 'plant'
-            ? `Planting${plantedCount ? ` · ${plantedCount}` : ''} · stop`
-            : `Plant trees${plantedCount ? ` (${plantedCount})` : ''}`}
-        </button>
+        {plantingEnabled ? (
+          <button
+            type="button"
+            className="ghost-button"
+            aria-pressed={pickMode === 'plant'}
+            onClick={() => setPickMode(pickMode === 'plant' ? 'none' : 'plant')}
+          >
+            {pickMode === 'plant'
+              ? `Planting${plantedCount ? ` · ${plantedCount}` : ''} · stop`
+              : `Plant trees${plantedCount ? ` (${plantedCount})` : ''}`}
+          </button>
+        ) : null}
       </div>
 
       {pickMode !== 'none' ? (

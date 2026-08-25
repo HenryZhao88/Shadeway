@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 
-import MapCanvas from './map/MapCanvas';
 import { useStore } from './state/store';
 import './theme.css';
 import DepartureCurve from './ui/DepartureCurve';
@@ -15,6 +14,10 @@ import TimeScrubber from './ui/TimeScrubber';
 import TurnList from './ui/TurnList';
 import Weather from './ui/Weather';
 import { clock } from './sun/position';
+
+// MapLibre + deck.gl account for nearly the entire JavaScript payload. Let the
+// route rail become interactive while that independent rendering stack loads.
+const MapCanvas = lazy(() => import('./map/MapCanvas'));
 
 const DAY = new Intl.DateTimeFormat(undefined, {
   weekday: 'short',
@@ -80,7 +83,15 @@ export default function App() {
       </aside>
 
       <main className="map-area">
-        <MapCanvas />
+        <Suspense
+          fallback={
+            <div className="map-loading" role="status">
+              <span className="spinner" aria-hidden="true" /> Loading the map…
+            </div>
+          }
+        >
+          <MapCanvas />
+        </Suspense>
         <MapTools />
       </main>
 

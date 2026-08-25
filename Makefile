@@ -4,7 +4,7 @@ DATA ?= data
 SCOPE ?= manhattan
 # Where a build lands. Override it to keep scopes side by side rather than
 # overwriting one with the other — a rebuild renumbers sample ids, so it also
-# throws away the matching horizon.npz.
+# invalidates the matching horizon.npz.
 #   make data warm serve SCOPE=manhattan_brooklyn OUT=data/nyc_mb
 OUT ?= $(DATA)/nyc
 
@@ -49,15 +49,18 @@ warm:
 	$(PY) -m shadeway.warm --data $(OUT) --out $(OUT)/horizon.npz
 
 serve:
-	SHADEWAY_DATA=$(OUT) .venv/bin/uvicorn shadeway.api:app --reload --port 8000
+	SHADEWAY_DATA=$(OUT) SHADEWAY_ENABLE_PLANTING=1 \
+		.venv/bin/uvicorn shadeway.api:app --reload --port 8000
 
 docker:
 	# Builds the client inside the image; ships $(OUT) as the city it serves.
 	# Run `make data warm` first — the pipeline is not in the image.
-	docker build -t shadeway:local .
+	docker build --build-arg CITY_DIR=$(OUT) -t shadeway:local .
 
 docker-run:
-	docker run --rm -p 8000:8000 --memory=1g shadeway:local
+	# Public images are read-only; opt into stateful planting for this local demo.
+	docker run --rm -p 8000:8000 --memory=1g \
+		-e SHADEWAY_ENABLE_PLANTING=1 shadeway:local
 
 stub:
 	.venv/bin/uvicorn shadeway.stub_api:app --reload --port 8000

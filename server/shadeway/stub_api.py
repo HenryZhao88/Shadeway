@@ -40,7 +40,12 @@ STUB_DELAY_MS = float(os.environ.get("SHADEWAY_STUB_DELAY_MS", "120"))
 
 @app.get("/api/health")
 def health() -> dict[str, object]:
-    return {"status": "ok", "scene": "stub", "cache_warm": True}
+    return {
+        "status": "ok",
+        "scene": "stub",
+        "cache_warm": True,
+        "planting_enabled": True,
+    }
 
 
 @app.post("/api/route", response_model=RouteResponse)

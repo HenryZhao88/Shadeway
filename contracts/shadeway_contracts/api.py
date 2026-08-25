@@ -173,9 +173,12 @@ class DepartureCurveResponse(Frozen):
 
 
 class PlantRequest(Frozen):
-    positions: list[LatLon]
-    species: str
-    dbh_cm: float = 20.0
+    # Planting mutates the one in-memory scene shared by the process. Keep one
+    # request bounded so a typo (or a public caller) cannot allocate an
+    # unbounded crown array and scan the full sample set thousands of times.
+    positions: list[LatLon] = Field(max_length=40)
+    species: str = Field(min_length=1, max_length=100)
+    dbh_cm: float = Field(default=20.0, ge=1.0, le=100.0)
 
 
 class PlantResponse(Frozen):

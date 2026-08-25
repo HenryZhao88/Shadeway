@@ -20,6 +20,7 @@ function reset() {
     routeGeneration: 0,
     overrideRouteId: null,
     timeseries: {},
+    timeseriesStatus: 'idle',
     departure: null,
     departureStatus: 'idle',
     scrubAt: new Date('2026-08-24T19:00:00Z'),
@@ -107,6 +108,22 @@ describe('fetchRoute', () => {
     expect(body.walk_speed_ms).toBe(1.1);
     expect(body.time_dependent).toBe(true);
   });
+
+  test('namespaces timeseries requests with the route request id', async () => {
+    const spy = vi.fn(mockFetch());
+    vi.stubGlobal('fetch', spy);
+    await useStore.getState().fetchRoute();
+    await vi.waitFor(() => {
+      expect(useStore.getState().timeseriesStatus).toBe('ready');
+    });
+    const calls = spy.mock.calls.filter(([url]) =>
+      String(url).includes('/timeseries'),
+    );
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [url] of calls) {
+      expect(String(url)).toContain('request_id=test-request');
+    }
+  });
 });
 
 describe('the scrubber split', () => {
@@ -188,6 +205,17 @@ describe('choosing a route', () => {
     useStore.getState().selectRoute('fastest');
     useStore.getState().setProfile('high_risk');
     expect(useStore.getState().overrideRouteId).toBeNull();
+  });
+
+  test('a profile change reselects the existing frontier without a request', async () => {
+    await useStore.getState().fetchRoute();
+    const spy = vi.fn(mockFetch());
+    vi.stubGlobal('fetch', spy);
+    useStore.getState().setProfile('high_risk');
+    expect(
+      spy.mock.calls.filter(([url]) => String(url).endsWith('/api/route')),
+    ).toHaveLength(0);
+    expect(chosenRouteId(useStore.getState())).toBe('shadeway');
   });
 });
 

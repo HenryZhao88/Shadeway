@@ -26,8 +26,10 @@ def test_cache_shape_and_dtype(cache):
     assert cache.store.shape == (2, len(cache.samples_xy), 72)
 
 
-def test_memory_footprint_is_144_bytes_per_sample(cache):
-    assert cache.nbytes == len(cache.samples_xy) * 72 * 2
+def test_memory_footprint_includes_quantised_tau_and_warm_flag(cache):
+    # 144 B horizon + 72 B tau + 1 B warm flag per sample. Tau used to be
+    # float32 (288 B/sample) and dominated the resident cache.
+    assert cache.nbytes == len(cache.samples_xy) * (72 * 3 + 1)
 
 
 def test_nothing_is_warm_before_you_ask(cache):
@@ -85,3 +87,39 @@ def test_invalidation_clears_only_nearby_samples(cache):
     assert 0 < cleared < len(ids)
     assert not cache.warm[0]
     assert cache.warm[ids].sum() > 0, "invalidation must be local, not global"
+
+
+def test_precomputed_cache_rejects_the_wrong_source_fingerprint(cache, tmp_path):
+    path = tmp_path / "wrong.npz"
+    np.savez_compressed(
+        path,
+        store=np.zeros_like(cache.store),
+        tau=np.full_like(cache.canopy_tau, 255),
+        fingerprint=np.asarray("different-build"),
+    )
+    target = HorizonCache(cache.scene, cache.samples_xy, fingerprint="expected-build")
+    assert not target.load_precomputed(path)
+    assert not target.warm.any()
+
+
+def test_precomputed_cache_accepts_matching_fingerprint(cache, tmp_path):
+    path = tmp_path / "matching.npz"
+    np.savez_compressed(
+        path,
+        store=np.zeros_like(cache.store),
+        tau=np.full_like(cache.canopy_tau, 255),
+        fingerprint=np.asarray("expected-build"),
+    )
+    target = HorizonCache(cache.scene, cache.samples_xy, fingerprint="expected-build")
+    assert target.load_precomputed(path)
+    assert target.warm.all()
+
+
+def test_trusted_legacy_float_tau_is_quantised_on_load(cache, tmp_path):
+    path = tmp_path / "legacy.npz"
+    tau = np.full(cache.canopy_tau.shape, 0.38, dtype=np.float32)
+    np.savez_compressed(path, store=np.zeros_like(cache.store), tau=tau)
+    target = HorizonCache(cache.scene, cache.samples_xy, fingerprint="expected-build")
+    assert target.load_precomputed(path, legacy_ok=True)
+    assert target.canopy_tau.dtype == np.uint8
+    assert float(target.canopy_tau[0, 0]) / 255.0 == pytest.approx(0.38, abs=0.002)
