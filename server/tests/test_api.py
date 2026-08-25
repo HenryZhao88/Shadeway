@@ -243,3 +243,134 @@ def test_amenities_are_served_from_the_index_not_the_parquet(client):
     for record in response.json():
         assert set(record) == {"amenity_id", "kind", "name", "lat", "lon"}
     assert len(state.amenities) >= len(response.json())
+
+
+def test_timeseries_window_defaults_to_the_walk_itself(client):
+    """Backwards-compatible default: zero hours means the walk's own duration."""
+    parsed = RouteResponse.model_validate(
+        client.post("/api/route", json=_body(client)).json()
+    )
+    route = parsed.routes[parsed.chosen_route_id]
+    series = TimeseriesResponse.model_validate(
+        client.get(
+            f"/api/route/{parsed.chosen_route_id}/timeseries",
+            params={"depart_iso": "2025-07-22T15:00:00-04:00", "step_minutes": 5},
+        ).json()
+    )
+    span_minutes = (
+        series.points[-1].at_iso - series.points[0].at_iso
+    ).total_seconds() / 60.0
+    assert span_minutes <= route.duration_s / 60.0 + 5.1
+
+
+def test_timeseries_can_span_a_whole_afternoon(client):
+    """The window the client asks for. Without it the series covers only the
+    walk's own length, which answers a much smaller question."""
+    parsed = RouteResponse.model_validate(
+        client.post("/api/route", json=_body(client)).json()
+    )
+    series = TimeseriesResponse.model_validate(
+        client.get(
+            f"/api/route/{parsed.chosen_route_id}/timeseries",
+            params={
+                "depart_iso": "2025-07-22T15:00:00-04:00",
+                "step_minutes": 15,
+                "hours": 6,
+            },
+        ).json()
+    )
+    span_minutes = (
+        series.points[-1].at_iso - series.points[0].at_iso
+    ).total_seconds() / 60.0
+    assert 5.5 * 60 <= span_minutes <= 6 * 60
+    assert len(series.points) >= 20
+
+
+def test_timeseries_sun_fraction_falls_as_the_afternoon_goes_on(client):
+    """A sanity check on the physics rather than the plumbing: the same route,
+    walked later, sees less direct beam as the sun drops."""
+    parsed = RouteResponse.model_validate(
+        client.post("/api/route", json=_body(client)).json()
+    )
+    series = TimeseriesResponse.model_validate(
+        client.get(
+            f"/api/route/{parsed.chosen_route_id}/timeseries",
+            params={
+                "depart_iso": "2025-07-22T15:00:00-04:00",
+                "step_minutes": 30,
+                "hours": 6,
+            },
+        ).json()
+    )
+    assert series.points[-1].sun_fraction <= series.points[0].sun_fraction
+
+
+def test_timeseries_uses_each_hour_own_weather(client, monkeypatch):
+    """A cost model carries the weather it was built with and takes only the sun
+    from the timestamp. Building one model for a six-hour window therefore walks
+    the 9pm route through 3pm's air temperature — which flattens exactly the
+    curve this endpoint exists to show."""
+    from shadeway.api import _state
+
+    state = _state()
+    real = state.weather.at
+    asked: list[int] = []
+
+    def recording(lat, lon, when):
+        asked.append(when.hour)
+        snapshot = real(lat, lon, when)
+        # cool by one degree per hour, so a frozen model is visible in the output
+        return snapshot.model_copy(
+            update={"air_temp_c": 40.0 - when.hour, "observed_iso": when}
+        )
+
+    monkeypatch.setattr(state.weather, "at", recording)
+
+    parsed = RouteResponse.model_validate(
+        client.post("/api/route", json=_body(client)).json()
+    )
+    asked.clear()
+    series = TimeseriesResponse.model_validate(
+        client.get(
+            f"/api/route/{parsed.chosen_route_id}/timeseries",
+            params={
+                "depart_iso": "2025-07-22T15:00:00-04:00",
+                "step_minutes": 30,
+                "hours": 5,
+            },
+        ).json()
+    )
+
+    assert len(set(asked)) >= 5, f"weather was only asked for hours {sorted(set(asked))}"
+    # falling air temperature must show up as a falling felt temperature
+    assert series.points[-1].mean_feels_like_c < series.points[0].mean_feels_like_c
+
+
+def test_timeseries_builds_one_model_per_hour_not_per_step(client, monkeypatch):
+    """The fix must not turn a cheap endpoint into an expensive one."""
+    from shadeway.api import _state
+
+    state = _state()
+    real = state.weather.at
+    calls: list[int] = []
+
+    def counting(lat, lon, when):
+        calls.append(when.hour)
+        return real(lat, lon, when)
+
+    monkeypatch.setattr(state.weather, "at", counting)
+
+    parsed = RouteResponse.model_validate(
+        client.post("/api/route", json=_body(client)).json()
+    )
+    calls.clear()
+    client.get(
+        f"/api/route/{parsed.chosen_route_id}/timeseries",
+        params={
+            "depart_iso": "2025-07-22T15:00:00-04:00",
+            "step_minutes": 15,
+            "hours": 4,
+        },
+    )
+    # 17 steps across 5 distinct hours
+    assert len(calls) <= 6, f"{len(calls)} weather lookups for 5 hours"

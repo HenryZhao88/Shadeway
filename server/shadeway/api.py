@@ -307,11 +307,17 @@ def timeseries(
     route_id: str,
     depart_iso: datetime,
     step_minutes: int = Query(default=5, ge=1, le=60),
+    hours: float = Query(default=0.0, ge=0.0, le=12.0),
     walk_speed_ms: float | None = Query(default=None, gt=0.3, le=3.0),
 ) -> TimeseriesResponse:
     """The heat-vs-time curve. One call returns the whole series, because it is
     the same sample points evaluated at N different times and the horizon cache
     makes that almost free.
+
+    `hours` sets the window. Zero — the default, kept so existing callers do not
+    change — spans the walk's own duration, which answers only "what if I set
+    off a few minutes later". Anything else spans that many hours, which is the
+    question a reader actually has: this route is fine now, what about at five?
 
     Walk speed defaults to whatever the /route call that produced this route
     asked for, so a slow walker's curve is that walker's curve — pass
@@ -322,13 +328,34 @@ def timeseries(
     built, edges, origin_request = cached
     lon, lat = built.legs[0].geometry[0]
     speed = walk_speed_ms if walk_speed_ms is not None else origin_request.walk_speed_ms
-    model = _cost_model((lon, lat), depart_iso, speed)
 
-    steps = max(2, int(built.duration_s / 60.0 / step_minutes) + 1)
+    # One cost model PER HOUR, not one for the whole window.
+    #
+    # A model carries the weather it was built with — air temperature, wind,
+    # humidity and the three irradiance terms — and only the sun position is
+    # taken from the timestamp passed to traverse(). So a single model moves the
+    # sun across the window while holding the weather frozen at the departure
+    # hour, and a 9pm walk gets modelled with 3pm's air temperature and 183 W/m2
+    # of diffuse. Harmless over the fifteen minutes the old default spanned;
+    # wrong over the six hours this endpoint now serves, and wrong in exactly
+    # the direction that flattens the curve the reader came for.
+    #
+    # Weather is hourly at source and cached per neighbourhood, so keying these
+    # by hour costs one UTCI table per hour and no extra network.
+    models: dict[datetime, EdgeCostModel] = {}
+
+    def model_at(when: datetime) -> EdgeCostModel:
+        hour = when.replace(minute=0, second=0, microsecond=0)
+        if hour not in models:
+            models[hour] = _cost_model((lon, lat), hour, speed)
+        return models[hour]
+
+    window_minutes = hours * 60.0 if hours > 0 else built.duration_s / 60.0
+    steps = max(2, int(window_minutes / step_minutes) + 1)
     points: list[TimeseriesPoint] = []
     for i in range(steps):
         at = depart_iso + timedelta(minutes=i * step_minutes)
-        costs = [model.traverse(e, at) for e in edges]
+        costs = [model_at(at).traverse(e, at) for e in edges]
         feels = np.array([c.mean_feels_like_c for c in costs])
         points.append(
             TimeseriesPoint(
