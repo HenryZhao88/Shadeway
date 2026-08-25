@@ -44,17 +44,24 @@ def _bearing_deg(line: LineString) -> float:
 
 
 class _NodeIndex:
-    """Snaps coordinates within NODE_SNAP_M onto a shared integer node id."""
+    """Snaps coordinates within NODE_SNAP_M onto a shared integer node id.
+
+    Carries the borough of whichever street first reached each node. A node
+    where two boroughs meet keeps the first one seen, which is arbitrary but
+    stable — and there is no correct answer for a node on a borough line.
+    """
 
     def __init__(self) -> None:
         self._coords: list[tuple[float, float]] = []
+        self._boroughs: list[str] = []
         self._lookup: dict[tuple[int, int], int] = {}
 
-    def get(self, x: float, y: float) -> int:
+    def get(self, x: float, y: float, borough: str = "") -> int:
         key = (round(x / NODE_SNAP_M), round(y / NODE_SNAP_M))
         if key not in self._lookup:
             self._lookup[key] = len(self._coords)
             self._coords.append((x, y))
+            self._boroughs.append(str(borough))
         return self._lookup[key]
 
     def frame(self) -> pd.DataFrame:
@@ -64,15 +71,20 @@ class _NodeIndex:
                 "node_id": np.arange(len(self._coords), dtype=np.uint32),
                 "x_m": np.asarray(xs, dtype=np.float64),
                 "y_m": np.asarray(ys, dtype=np.float64),
+                "borough": list(self._boroughs),
             }
         )
 
 
 def build_sidewalk_edges(streets, sidewalk_hint=None):
-    """streets: GeoDataFrame from cscl.load(). sidewalk_hint: unused since the
-    planimetric datasets turned out to be unusable (DATA-FINDINGS #8) — kept for
-    interface stability; widths come from CSCL streetwidth via offset_for().
-    Returns (nodes_df, edges_df)."""
+    """streets: GeoDataFrame from cscl.load(). Returns (nodes_df, edges_df).
+
+    `sidewalk_hint` is retained only so existing callers keep working. Both NYC
+    sidewalk datasets are Socrata "map" assets that serve null geometry through
+    the API (DATA-FINDINGS #8), so nothing supplies it and `width_m` stays null
+    — see `_width_hint` for what it would do if real geometry ever arrived.
+    Offsets come from CSCL `streetwidth`, which is per-segment and free.
+    """
     hint_tree = None
     hint_geoms = None
     if sidewalk_hint is not None and len(sidewalk_hint):
@@ -103,12 +115,13 @@ def build_sidewalk_edges(streets, sidewalk_hint=None):
             # a street with only one usable side is worse than no street:
             # per-side guidance is the product, so emit both sides or neither
             continue
+        borough = str(getattr(street, "borough", "") or "")
         for side, geom in side_geoms:
             (ax, ay), (bx, by) = geom.coords[0], geom.coords[-1]
             rows.append(
                 {
-                    "u": index.get(ax, ay),
-                    "v": index.get(bx, by),
+                    "u": index.get(ax, ay, borough),
+                    "v": index.get(bx, by, borough),
                     "kind": int(EdgeKind.SIDEWALK),
                     "side": int(side),
                     "street_name": street.street_name,
@@ -130,7 +143,11 @@ def build_sidewalk_edges(streets, sidewalk_hint=None):
         )
     nodes = index.frame()
     nodes["is_intersection"] = True
-    nodes["borough"] = "1"
+    # borough comes from the street that created each node, not from a constant.
+    # Hardcoding "1" silently labelled every Brooklyn node as Manhattan the
+    # moment the scope grew past one borough.
+    if "borough" not in nodes.columns or not len(nodes):
+        nodes["borough"] = ""
     return nodes, edges
 
 

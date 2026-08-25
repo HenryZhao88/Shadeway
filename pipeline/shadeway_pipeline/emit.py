@@ -84,8 +84,10 @@ def build_tables(scope: Scope) -> dict[str, pa.Table]:
             "is_intersection": pa.array(
                 np.ones(len(nodes_df), dtype=bool), type=pa.bool_()
             ),
+            # per node, from the street that created it — not scope.boroughs[0],
+            # which labelled all of Brooklyn as Manhattan
             "borough": pa.array(
-                [scope.boroughs[0]] * len(nodes_df), type=pa.string()
+                [str(b) for b in nodes_df["borough"]], type=pa.string()
             ),
         },
         schema=NODES,

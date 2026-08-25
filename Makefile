@@ -2,6 +2,11 @@ PY := .venv/bin/python
 PIP := uv pip install --python .venv/bin/python
 DATA ?= data
 SCOPE ?= manhattan
+# Where a build lands. Override it to keep scopes side by side rather than
+# overwriting one with the other — a rebuild renumbers sample ids, so it also
+# throws away the matching horizon.npz.
+#   make data warm serve SCOPE=manhattan_brooklyn OUT=data/nyc_mb
+OUT ?= $(DATA)/nyc
 
 .PHONY: venv install test lint fixtures types validate data amenities warm serve stub dev clean
 
@@ -29,19 +34,19 @@ fixtures:
 	$(PY) -m shadeway_contracts.fixtures --out $(DATA)/fixtures
 
 data:
-	$(PY) -m shadeway_pipeline.emit --out $(DATA)/nyc --scope $(SCOPE)
+	$(PY) -m shadeway_pipeline.emit --out $(OUT) --scope $(SCOPE)
 
 amenities:
-	# Rebuilds amenities.parquet alone, against the graph already in $(DATA)/nyc.
+	# Rebuilds amenities.parquet alone, against the graph already in $(OUT).
 	# A full `make data` renumbers sample ids and invalidates horizon.npz; this
 	# does not, because nothing else is keyed to an amenity id.
-	$(PY) -m shadeway_pipeline.emit --out $(DATA)/nyc --scope $(SCOPE) --only amenities
+	$(PY) -m shadeway_pipeline.emit --out $(OUT) --scope $(SCOPE) --only amenities
 
 validate:
-	$(PY) -m shadeway_pipeline.validate --data $(DATA)/nyc
+	$(PY) -m shadeway_pipeline.validate --data $(OUT)
 
 warm:
-	$(PY) -m shadeway.warm --data $(DATA)/nyc
+	$(PY) -m shadeway.warm --data $(OUT) --out $(OUT)/horizon.npz
 
 serve:
 	.venv/bin/uvicorn shadeway.api:app --reload --port 8000
