@@ -89,8 +89,10 @@ export default function MapCanvas() {
         const key = box.map((v) => v.toFixed(3)).join(',');
         if (key === lastBbox.current) return;
         lastBbox.current = key;
-        void fetchViewportData(box);
-        return;
+        void fetchViewportData(box).then((ok) => {
+          // forget a bbox we failed on, so the next tick tries it again
+          if (!ok && lastBbox.current === key) lastBbox.current = '';
+        });
       }, VIEW_SETTLE_MS);
     },
     [fetchViewportData],
@@ -102,7 +104,15 @@ export default function MapCanvas() {
     requestViewportData(viewState);
     const onResize = () => requestViewportData(viewState);
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    // A slow-starting server is the common first-load failure, so keep asking
+    // for a little while rather than showing an empty city until someone pans.
+    const retry = setInterval(() => {
+      if (!lastBbox.current) requestViewportData(viewState);
+    }, 2000);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      clearInterval(retry);
+    };
   }, [requestViewportData, viewState]);
 
   const layers = useMemo(() => {

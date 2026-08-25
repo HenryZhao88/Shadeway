@@ -228,3 +228,27 @@ describe('the fixture matches the contract', () => {
     }
   });
 });
+
+describe('viewport data retries', () => {
+  test('reports success so the caller can remember the bbox', async () => {
+    const ok = await useStore
+      .getState()
+      .fetchViewportData([-74, 40.7, -73.9, 40.8]);
+    expect(ok).toBe(true);
+  });
+
+  test('reports failure so the caller can forget it and try again', async () => {
+    // The common first-load failure is a server that has not finished starting.
+    // Latching on the bbox there leaves the map empty until someone pans.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    const ok = await useStore
+      .getState()
+      .fetchViewportData([-74, 40.7, -73.9, 40.8]);
+    expect(ok).toBe(false);
+  });
+});

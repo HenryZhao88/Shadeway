@@ -126,7 +126,8 @@ interface State {
 
   fetchRoute: () => Promise<void>;
   fetchDeparture: () => Promise<void>;
-  fetchViewportData: (bbox: Bbox) => Promise<void>;
+  /** Resolves false when the fetch failed, so the caller can retry. */
+  fetchViewportData: (bbox: Bbox) => Promise<boolean>;
   fetchHealth: () => Promise<void>;
   plant: (positions: LatLon[]) => Promise<void>;
 }
@@ -186,8 +187,8 @@ export const useStore = create<State>((set, get) => ({
   health: null,
   pickMode: 'none',
   plantedCount: 0,
-  hoveredLegIndex: null,
   lastPlant: null,
+  hoveredLegIndex: null,
 
   setScrubAt: (when) => {
     set({ scrubAt: when });
@@ -302,9 +303,15 @@ export const useStore = create<State>((set, get) => ({
         buildings: buildings.buildings,
         buildingsTruncated: buildings.truncated,
       });
+      return true;
     } catch (error) {
-      if (aborted(error)) return;
-      // Map furniture. A failure here must not take the route down with it.
+      // Map furniture. A failure here must not take the route down with it —
+      // but it must not leave the map permanently empty either, which is what
+      // happens if the caller remembers the bbox it just failed on. The most
+      // likely failure is the very first load racing a server that is still
+      // starting, and that map never repaints until someone pans.
+      if (aborted(error)) return false;
+      return false;
     }
   },
 
