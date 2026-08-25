@@ -3,6 +3,13 @@ from shadeway_contracts.fixtures import build_fixture_city
 from shadeway_pipeline import validate
 
 
+def _named(checks, name):
+    """The one check we care about, by name."""
+    match = next((c for c in checks if c.name == name), None)
+    assert match is not None, f"no check named {name!r}"
+    return match
+
+
 def test_the_fixture_city_passes_every_hard_check():
     checks = validate.run_checks(build_fixture_city())
     failed = [c for c in checks if c.level == "hard" and not c.ok]
@@ -43,3 +50,73 @@ def test_soft_checks_never_fail_the_build():
     assert soft, "there should be informational checks too"
     # a soft check may be not-ok; that must not be treated as a failure
     assert validate.exit_code(checks) == 0
+
+
+def test_connectivity_is_judged_per_borough_not_across_the_scope():
+    """Manhattan and Brooklyn are two components by construction — the East
+    River crossings are rw_type 3, which cscl.py excludes. A scope-wide check
+    fails a correct build."""
+    import pyarrow as pa
+
+    from shadeway_contracts.fixtures import build_fixture_city
+    from shadeway_contracts.tables import NODES
+
+    tables = build_fixture_city()
+    nodes = tables["nodes"].to_pydict()
+    # relabel half the nodes as a second borough without touching any edge, so
+    # the graph is unchanged and only the labelling differs
+    half = len(nodes["node_id"]) // 2
+    nodes["borough"] = ["1"] * half + ["3"] * (len(nodes["node_id"]) - half)
+    tables["nodes"] = pa.table(nodes, schema=NODES)
+
+    check = _named(validate.run_checks(tables), "connectivity")
+    assert "1:" in check.detail and "3:" in check.detail
+
+
+def test_tau_check_does_not_count_genus_level_sourcing_as_unsourced():
+    """"genus default from Quercus palustris (AUF ...)" is a real citation for a
+    real measurement on a congener. Substring-matching "default" called it
+    unsourced and inflated the reported figure roughly fourfold."""
+    import pyarrow as pa
+
+    from shadeway_contracts.fixtures import build_fixture_city
+    from shadeway_contracts.tables import TREES
+
+    tables = build_fixture_city()
+    trees = tables["trees"].to_pydict()
+    n = len(trees["tree_id"])
+    trees["tau_source"] = ["genus default from Quercus palustris (AUF)"] * n
+    tables["trees"] = pa.table(trees, schema=TREES)
+
+    check = _named(validate.run_checks(tables), "tau_sourced")
+    assert check.ok
+    assert "0% (0) on the global default" in check.detail
+    assert "100% genus-level" in check.detail
+
+
+def test_tau_check_still_flags_a_genuinely_unsourced_canopy():
+    import pyarrow as pa
+
+    from shadeway_contracts.fixtures import build_fixture_city
+    from shadeway_contracts.tables import TREES
+
+    tables = build_fixture_city()
+    trees = tables["trees"].to_pydict()
+    n = len(trees["tree_id"])
+    trees["tau_source"] = ["global default — midpoint of the band"] * n
+    tables["trees"] = pa.table(trees, schema=TREES)
+
+    check = _named(validate.run_checks(tables), "tau_sourced")
+    assert not check.ok
+
+
+def test_offsets_check_replaces_the_unreachable_width_check():
+    """`width_m` comes from planimetric data that serves null geometry through
+    the API, so warning about it every build reported a decision as unfinished
+    work. What the offsets actually came from is checkable, and matters more."""
+    from shadeway_contracts.fixtures import build_fixture_city
+
+    checks = validate.run_checks(build_fixture_city())
+    names = {c.name for c in checks}
+    assert "offsets_from_streetwidth" in names
+    assert "sidewalk_widths" not in names

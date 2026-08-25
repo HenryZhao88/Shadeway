@@ -76,14 +76,41 @@ def run_checks(tables: dict[str, pa.Table]) -> list[Check]:
     for n in parent:
         root = find(n)
         sizes[root] = sizes.get(root, 0) + 1
-    fraction = max(sizes.values()) / len(parent) if parent else 0.0
+
+    # Connectivity is checked PER BOROUGH, not across the whole scope.
+    #
+    # Manhattan and Brooklyn are not walkable to each other in this model: the
+    # East River crossings are all rw_type 3, which cscl.py excludes. So a
+    # correct manhattan+brooklyn build is two large components, and a
+    # scope-wide check would report 0.673 and fail a build that is fine. What
+    # actually matters is that you can walk anywhere within a borough.
+    boroughs = [str(b) for b in nodes["borough"]]
+    node_ids = [int(n) for n in nodes["node_id"]]
+    per_borough: dict[str, dict[int, int]] = {}
+    for node_id, borough in zip(node_ids, boroughs):
+        per_borough.setdefault(borough, {})
+        root = find(node_id)
+        per_borough[borough][root] = per_borough[borough].get(root, 0) + 1
+
+    worst_name, worst_fraction = "", 1.0
+    for borough, roots in sorted(per_borough.items()):
+        total = sum(roots.values())
+        fraction = max(roots.values()) / total if total else 0.0
+        if fraction < worst_fraction:
+            worst_name, worst_fraction = borough, fraction
+    detail = " · ".join(
+        f"{borough}: {max(roots.values()) / sum(roots.values()):.3f} "
+        f"of {sum(roots.values())}"
+        for borough, roots in sorted(per_borough.items())
+    )
     checks.append(
         Check(
             "connectivity",
-            fraction >= MIN_LARGEST_COMPONENT,
+            worst_fraction >= MIN_LARGEST_COMPONENT,
             "hard",
-            f"largest component {fraction:.3f} of {len(parent)} nodes, "
-            f"{len(sizes)} components",
+            f"largest component per borough — {detail}"
+            + (f" (worst: {worst_name})" if len(per_borough) > 1 else "")
+            + f" · {len(sizes)} components scope-wide",
         )
     )
 
@@ -137,26 +164,60 @@ def run_checks(tables: dict[str, pa.Table]) -> list[Check]:
     )
 
     # --- soft: canopy sourcing --------------------------------------------
+    #
+    # Three tiers, not two. Matching on the substring "default" counted every
+    # genus-level entry as unsourced, because those sources read "genus default
+    # from Quercus palustris (AUF ...)" — a real citation for a real measurement
+    # on a congener. That reported 23% defaulted when the truly unsourced share
+    # was 6%, which is the difference between a soft warning worth acting on and
+    # one you learn to ignore.
     tau_sources = tables["trees"].column("tau_source").to_pylist()
-    defaulted = sum("default" in s.lower() for s in tau_sources)
-    frac = defaulted / max(1, len(tau_sources))
+    total_trees = max(1, len(tau_sources))
+    unsourced = sum(s.lower().startswith("global default") for s in tau_sources)
+    by_genus = sum(
+        "genus default" in s.lower() and not s.lower().startswith("global default")
+        for s in tau_sources
+    )
+    by_species = total_trees - unsourced - by_genus
+    frac = unsourced / total_trees
     checks.append(
         Check(
             "tau_sourced",
-            frac < 0.5,
+            frac < 0.15,
             "soft",
-            f"{defaulted}/{len(tau_sources)} trees ({frac:.0%}) use a default tau",
+            f"{by_species / total_trees:.0%} species-level · "
+            f"{by_genus / total_trees:.0%} genus-level · "
+            f"{frac:.0%} ({unsourced}) on the global default",
         )
     )
 
-    # --- soft: widths ------------------------------------------------------
-    widths = [w for w in edges["width_m"] if w is not None]
+    # --- soft: offsets -----------------------------------------------------
+    #
+    # NOT a sidewalk-width check any more. `width_m` is nullable and sourced
+    # from planimetric sidewalk data, and both NYC sidewalk datasets are Socrata
+    # "map" assets that serve null geometry through the API (DATA-FINDINGS #8) —
+    # so it is null on every edge by design, and warning about that every build
+    # was reporting a decision as if it were unfinished work.
+    #
+    # What IS worth checking is the thing those datasets were wanted for: that
+    # the per-segment offsets came from CSCL `streetwidth` rather than falling
+    # back to the constant. A build where most streets hit the fallback has lost
+    # the per-street offsets, and on a wide avenue that offset is the difference
+    # between the two sidewalks being 13 m and 25 m apart — which is the whole
+    # side-of-street claim.
+    from shadeway_pipeline.config import SIDEWALK_HALF_WIDTH_M, offset_for
+
+    fallback_span = 2.0 * (offset_for(None) - SIDEWALK_HALF_WIDTH_M)
+    street_spans = _street_spans(edges)
+    varied = [gap for gap in street_spans if abs(gap - fallback_span) > 0.5]
+    share = len(varied) / len(street_spans) if street_spans else 0.0
     checks.append(
         Check(
-            "sidewalk_widths",
-            len(widths) > 0,
+            "offsets_from_streetwidth",
+            share >= 0.80,
             "soft",
-            f"{len(widths)}/{len(edges['edge_id'])} edges have a measured width",
+            f"{share:.0%} of streets got a per-segment offset from CSCL "
+            f"streetwidth; the rest fell back to {fallback_span:.1f} m",
         )
     )
 
@@ -212,6 +273,36 @@ def main() -> None:
     code = exit_code(checks)
     print("\n" + ("all hard checks passed" if code == 0 else "HARD CHECKS FAILED"))
     raise SystemExit(code)
+
+
+def _street_spans(edges) -> list[float]:
+    """Distance between the two sidewalks of each street, in metres.
+
+    Recovered from geometry rather than trusted from a column: the left and
+    right edges of one `physical_id` are offset from the same centerline, so the
+    gap between their midpoints is twice the offset that was applied.
+    """
+    import shapely
+
+    from shadeway_contracts.tables import EdgeKind, Side
+
+    sides: dict[int, dict[int, object]] = {}
+    for pid, side, kind, wkb in zip(
+        edges["physical_id"], edges["side"], edges["kind"], edges["geom_wkb"]
+    ):
+        if kind != EdgeKind.SIDEWALK:
+            continue
+        sides.setdefault(int(pid), {})[int(side)] = wkb
+
+    spans: list[float] = []
+    for pair in sides.values():
+        left, right = pair.get(int(Side.LEFT)), pair.get(int(Side.RIGHT))
+        if left is None or right is None:
+            continue
+        a = shapely.from_wkb(left).interpolate(0.5, normalized=True)
+        b = shapely.from_wkb(right).interpolate(0.5, normalized=True)
+        spans.append(float(a.distance(b)))
+    return spans
 
 
 if __name__ == "__main__":
