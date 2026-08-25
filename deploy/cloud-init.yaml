@@ -1,0 +1,61 @@
+#cloud-config
+# Paste this into "Show advanced options -> Management -> Cloud-init script"
+# when creating the Oracle instance. It installs Docker, opens the port at the
+# host firewall, and sets shadeway up as a service that survives reboots.
+#
+# It does NOT fetch the image — see deploy/push-to-instance.sh, which ships the
+# one you already built and verified locally.
+
+# The deploy key is set here as well as in the console's own SSH field. Two
+# reasons: cloud-init is the thing we can version and re-apply, and an instance
+# you cannot log into is an instance you have to destroy and rebuild.
+users:
+  - name: ubuntu
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    groups: [adm, sudo]
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEEvLlBTB8PnHD9ZWrLc50jyPmRT1NNv8VH6E94YIwT4 shadeway-deploy
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - docker.io
+  - iptables-persistent
+
+write_files:
+  # Oracle's stock images ship an INPUT chain that REJECTs everything except
+  # SSH, and it is *not* the same thing as the VCN Security List. Opening the
+  # Security List in the console and then finding the port still dead is the
+  # single most common way an OCI deploy appears broken. Both have to be open.
+  - path: /etc/systemd/system/shadeway.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=shadeway
+      After=docker.service
+      Requires=docker.service
+
+      [Service]
+      Restart=always
+      RestartSec=5
+      ExecStartPre=-/usr/bin/docker rm -f shadeway
+      ExecStart=/usr/bin/docker run --rm --name shadeway \
+        -p 80:8000 \
+        --memory=2g \
+        shadeway:local
+      ExecStop=/usr/bin/docker stop shadeway
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - systemctl enable --now docker
+  - usermod -aG docker ubuntu
+  # host firewall: let 80 in, ahead of the stock REJECT rule
+  - iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
+  - netfilter-persistent save
+  # the service is enabled but cannot start until the image is loaded
+  - systemctl enable shadeway

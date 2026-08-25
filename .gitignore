@@ -64,3 +64,8 @@ Thumbs.db
 .env.*.local
 *.pem
 *.key
+
+# SSH keypair for the Oracle deploy. It lives in ~/.ssh; this is belt and
+# braces in case anyone ever generates one inside the repo.
+shadeway_oracle
+shadeway_oracle.pub
