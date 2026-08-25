@@ -12,6 +12,14 @@ dependencies = [
     "numpy>=1.26",
     "httpx>=0.27",
     "tqdm>=4.66",
+    # Both are imported at RUNTIME and were undeclared: the server only ran
+    # because a dev machine also installs the pipeline, which pulls them in.
+    # A server-only install (a container, a fresh venv) crashed on the first
+    # request. pyproj: EPSG:32118 <-> WGS84 on every response boundary.
+    # scipy: the KD-trees behind tree occlusion, amenity search and the
+    # nearest-street lookup that names a shading building.
+    "pyproj>=3.6",
+    "scipy>=1.13",
 ]
 
 [project.optional-dependencies]
