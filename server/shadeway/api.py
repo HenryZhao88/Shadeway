@@ -552,3 +552,23 @@ def _ll_to_xy(lat: float, lon: float) -> tuple[float, float]:
         _to_xy = Transformer.from_crs("EPSG:4326", f"EPSG:{CRS_EPSG}", always_xy=True)
     x, y = _to_xy.transform(lon, lat)
     return float(x), float(y)
+
+
+# --------------------------------------------------------------- the client
+#
+# Serving the built SPA from the same process makes the whole thing ONE
+# deployable unit: no separate static host, no CORS in production, no second
+# URL to keep in sync. In development this directory does not exist and Vite
+# serves the client on :5173 instead, proxying /api here — which is why this is
+# conditional rather than required.
+#
+# Mounted last, on purpose. Every /api route above is already registered, and
+# Starlette matches routes in order, so the catch-all mount cannot shadow them.
+_WEB_DIST = Path(
+    os.environ.get("SHADEWAY_WEB_DIST", Path(__file__).resolve().parents[2] / "web" / "dist")
+)
+
+if (_WEB_DIST / "index.html").exists():
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/", StaticFiles(directory=str(_WEB_DIST), html=True), name="web")

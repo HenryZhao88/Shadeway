@@ -1,0 +1,28 @@
+# The raw downloads are ~700 MB and the image needs none of them: the pipeline
+# runs offline and only its output ships.
+data/cache
+data/fixtures
+data/nyc_mb
+
+# Built inside the image, from source.
+node_modules
+web/node_modules
+web/dist
+
+# Never useful in a container.
+.venv
+.git
+.ruff_cache
+**/.pytest_cache
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+web/tsconfig.tsbuildinfo
+
+# The pipeline is not installed in the runtime image.
+pipeline
+
+# Docs and plans.
+docs
+*.md
+!README.md

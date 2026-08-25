@@ -8,7 +8,7 @@ SCOPE ?= manhattan
 #   make data warm serve SCOPE=manhattan_brooklyn OUT=data/nyc_mb
 OUT ?= $(DATA)/nyc
 
-.PHONY: venv install test lint fixtures types validate data amenities warm serve stub dev clean
+.PHONY: venv install test lint fixtures types validate data amenities warm serve stub dev docker docker-run clean
 
 venv:
 	uv venv --python 3.11 --allow-existing .venv
@@ -49,7 +49,15 @@ warm:
 	$(PY) -m shadeway.warm --data $(OUT) --out $(OUT)/horizon.npz
 
 serve:
-	.venv/bin/uvicorn shadeway.api:app --reload --port 8000
+	SHADEWAY_DATA=$(OUT) .venv/bin/uvicorn shadeway.api:app --reload --port 8000
+
+docker:
+	# Builds the client inside the image; ships $(OUT) as the city it serves.
+	# Run `make data warm` first — the pipeline is not in the image.
+	docker build -t shadeway:local .
+
+docker-run:
+	docker run --rm -p 8000:8000 --memory=1g shadeway:local
 
 stub:
 	.venv/bin/uvicorn shadeway.stub_api:app --reload --port 8000
