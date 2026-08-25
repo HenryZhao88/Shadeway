@@ -109,6 +109,8 @@ interface State {
   health: Health | null;
   pickMode: PickMode;
   plantedCount: number;
+  /** What the last plant invalidated — the cache story, in one number. */
+  lastPlant: { planted: number; invalidated: number } | null;
   hoveredLegIndex: number | null;
 
   setScrubAt: (when: Date) => void;
@@ -185,6 +187,7 @@ export const useStore = create<State>((set, get) => ({
   pickMode: 'none',
   plantedCount: 0,
   hoveredLegIndex: null,
+  lastPlant: null,
 
   setScrubAt: (when) => {
     set({ scrubAt: when });
@@ -319,7 +322,13 @@ export const useStore = create<State>((set, get) => ({
       // Plant mode stays armed: the demo beat is a whole corridor of trees, and
       // re-arming the tool between every one of them would be absurd. The
       // button turns it off.
-      set((state) => ({ plantedCount: state.plantedCount + response.planted }));
+      set((state) => ({
+        plantedCount: state.plantedCount + response.planted,
+        lastPlant: {
+          planted: response.planted,
+          invalidated: response.invalidated_samples,
+        },
+      }));
       await get().fetchRoute();
     } catch (error) {
       if (aborted(error)) return;

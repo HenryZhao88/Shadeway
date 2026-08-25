@@ -10,6 +10,7 @@ import DepartureCurve from '../ui/DepartureCurve';
 import HeatProfile from '../ui/HeatProfile';
 import Hero from '../ui/Hero';
 import RouteCompare from '../ui/RouteCompare';
+import RouteTimeseries from '../ui/RouteTimeseries';
 import ThermalStrip from '../ui/ThermalStrip';
 import TurnList from '../ui/TurnList';
 import Weather from '../ui/Weather';
@@ -20,6 +21,7 @@ import {
   HEALTH,
   ROUTE_RESPONSE,
   SHADEWAY,
+  TIMESERIES,
   mockFetch,
 } from './fixture';
 
@@ -386,5 +388,110 @@ describe('Weather', () => {
     });
     render(<Weather />);
     expect(screen.getByText(/not an observation/i)).toBeInTheDocument();
+  });
+});
+
+describe('RouteTimeseries', () => {
+  test('waits rather than drawing a curve it does not have', () => {
+    loadRoute({ timeseries: {} });
+    render(<RouteTimeseries />);
+    expect(
+      screen.getByText(/Walking the route forward through the afternoon/i),
+    ).toBeInTheDocument();
+  });
+
+  test('plots both the average and the worst block', () => {
+    loadRoute({ timeseries: { shadeway: TIMESERIES } });
+    const { container } = render(<RouteTimeseries />);
+    // two series on one axis, so two paths and a legend naming both
+    expect(container.querySelectorAll('path')).toHaveLength(2);
+    expect(screen.getByText('average over the walk')).toBeInTheDocument();
+    expect(screen.getByText('worst block')).toBeInTheDocument();
+  });
+
+  test('names the peak when it falls inside the window', () => {
+    loadRoute({ timeseries: { shadeway: TIMESERIES } });
+    render(<RouteTimeseries />);
+    const note = document.querySelector('.chart-note');
+    // the fixture peaks at 36 an hour and a half in, then eases off
+    expect(note?.textContent).toMatch(/peaks at 36°/);
+    expect(note?.textContent).toMatch(/then eases off/);
+  });
+
+  test('says plainly when the route does not care what time you go', () => {
+    loadRoute({
+      timeseries: {
+        shadeway: {
+          route_id: 'shadeway',
+          points: TIMESERIES.points.map((point) => ({
+            ...point,
+            mean_feels_like_c: 30,
+            max_feels_like_c: 33,
+          })),
+        },
+      },
+    });
+    render(<RouteTimeseries />);
+    expect(
+      document.querySelector('.chart-note')?.textContent,
+    ).toMatch(/holds steady/);
+  });
+
+  test('describes the curve for a screen reader', () => {
+    loadRoute({ timeseries: { shadeway: TIMESERIES } });
+    render(<RouteTimeseries />);
+    expect(
+      screen.getByLabelText(/worst block\s+peaks at 39 degrees/i),
+    ).toBeInTheDocument();
+  });
+
+  test('offers the same numbers as a table', async () => {
+    loadRoute({ timeseries: { shadeway: TIMESERIES } });
+    render(<RouteTimeseries />);
+    await userEvent.click(screen.getByText('Show the numbers'));
+    const table = screen.getByRole('table');
+    expect(within(table).getAllByRole('row')).toHaveLength(
+      TIMESERIES.points.length + 1,
+    );
+  });
+
+  test('can send the scrubber to the route worst hour', async () => {
+    loadRoute({ timeseries: { shadeway: TIMESERIES } });
+    render(<RouteTimeseries />);
+    const before = useStore.getState().scrubAt.getTime();
+    await userEvent.click(screen.getByText(/Jump to its worst hour/));
+    expect(useStore.getState().scrubAt.getTime()).not.toBe(before);
+  });
+
+  test('follows the route the reader picked, not the server default', () => {
+    loadRoute({
+      overrideRouteId: 'fastest',
+      timeseries: { fastest: { ...TIMESERIES, route_id: 'fastest' } },
+    });
+    render(<RouteTimeseries />);
+    expect(document.querySelector('.chart-note')).toBeTruthy();
+  });
+});
+
+describe('RouteCompare exposure stats', () => {
+  test('surfaces what the recommendation is made of', () => {
+    loadRoute();
+    render(<RouteCompare />);
+    // shadeway in the fixture: 40% sun, 20% canopy, 25% sky view
+    expect(screen.getByText('40%')).toBeInTheDocument();
+    expect(screen.getByText('20%')).toBeInTheDocument();
+    expect(screen.getByText('25%')).toBeInTheDocument();
+  });
+
+  test('reports the p90 block rather than only the mean', () => {
+    loadRoute();
+    render(<RouteCompare />);
+    expect(screen.getByText('p90 block')).toBeInTheDocument();
+  });
+
+  test('does not repeat the distance the thermal strip already shows', () => {
+    loadRoute();
+    const { container } = render(<RouteCompare />);
+    expect(container.querySelectorAll('.exposure-stat')).toHaveLength(4);
   });
 });

@@ -15,6 +15,7 @@ export default function MapTools() {
   const pickMode = useStore((s) => s.pickMode);
   const setPickMode = useStore((s) => s.setPickMode);
   const plantedCount = useStore((s) => s.plantedCount);
+  const lastPlant = useStore((s) => s.lastPlant);
   const buildingsTruncated = useStore((s) => s.buildingsTruncated);
 
   return (
@@ -42,9 +43,19 @@ export default function MapTools() {
 
       {pickMode !== 'none' ? (
         <p className="map-overlay map-hint">
-          {pickMode === 'plant'
-            ? 'Keep clicking to plant honey locusts along a corridor. The route re-runs after each one.'
-            : `Click the map to set the ${pickMode}.`}
+          {pickMode === 'plant' ? (
+            lastPlant ? (
+              <>
+                Planted {lastPlant.planted}. That invalidated{' '}
+                <span className="num">{lastPlant.invalidated}</span> cached sample
+                points — everything else stayed warm.
+              </>
+            ) : (
+              'Keep clicking to plant honey locusts along a corridor. The route re-runs after each one.'
+            )
+          ) : (
+            `Click the map to set the ${pickMode}.`
+          )}
         </p>
       ) : buildingsTruncated ? (
         <p className="map-overlay map-hint">

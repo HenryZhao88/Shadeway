@@ -447,6 +447,13 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 2px;
   flex: none;
 }
+/* Same footprint, outlined instead of filled — a shape difference, so the pair
+   stays distinguishable when the ramp gives both series the same colour. */
+.legend-swatch-dashed {
+  background: none;
+  border: 1.5px dashed currentColor;
+  border-radius: 2px;
+}
 
 /* ---------------------------------------------------------------- compare */
 
@@ -510,6 +517,26 @@ input[type="range"]::-moz-range-thumb {
   font-family: var(--display);
   font-weight: 700;
   font-stretch: 112%;
+}
+
+.exposure {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+  gap: 1px;
+  margin-top: 10px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.exposure-stat {
+  padding: 7px 8px;
+  background: var(--panel-2);
+}
+.exposure-stat dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--ink);
 }
 
 /* ------------------------------------------------------------ turn cards */

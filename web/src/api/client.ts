@@ -131,11 +131,15 @@ export function getTimeseries(
   routeId: string,
   departAt: Date,
   walkSpeedMs: number,
+  hours = 6,
   signal?: AbortSignal,
 ) {
   const query = new URLSearchParams({
     depart_iso: departAt.toISOString(),
-    step_minutes: '5',
+    // 15-minute resolution over six hours: fine enough to see the afternoon
+    // turn over, coarse enough to stay one cheap call.
+    step_minutes: '15',
+    hours: String(hours),
     walk_speed_ms: String(walkSpeedMs),
   });
   return json<TimeseriesResponse>(

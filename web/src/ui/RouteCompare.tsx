@@ -43,6 +43,7 @@ export default function RouteCompare() {
       </div>
 
       <Verdict chosen={chosen} fastest={fastest} />
+      <Exposure route={chosen} />
 
       {options.length === 1 ? (
         <p className="hint" style={{ marginTop: 10 }}>
@@ -101,6 +102,51 @@ function Option({
         {degrees(option.feels_like_c.mean_c)}°
       </span>
     </button>
+  );
+}
+
+/** What the recommendation is made of.
+ *
+ *  All of these come back on every route and none of them were on screen. The
+ *  canopy share is the one that earns its place: "shaded, but by honey locusts"
+ *  is the claim no other shade router can make, and the interface only ever
+ *  made it one turn at a time. */
+function Exposure({ route }: { route: Route }) {
+  const { sun_fraction, mean_svf, canopy_fraction } = route.exposure;
+  return (
+    <dl className="exposure">
+      {/* Four, not five: distance is already under both thermal strips, and a
+          fifth stat wrapped the row for a number the reader has just read. */}
+      <Stat
+        label="in sun"
+        value={`${Math.round(sun_fraction * 100)}%`}
+        hint="share of the walk with the direct beam on you"
+      />
+      <Stat
+        label="canopy"
+        value={`${Math.round(canopy_fraction * 100)}%`}
+        hint="dappled, not opaque — leaves let some of the beam through"
+      />
+      <Stat
+        label="sky view"
+        value={`${Math.round(mean_svf * 100)}%`}
+        hint="how much sky the street sees; low means deep canyon"
+      />
+      <Stat
+        label="p90 block"
+        value={`${degrees(route.feels_like_c.p90_c)}°`}
+        hint="the 90th-percentile block, not the single worst one"
+      />
+    </dl>
+  );
+}
+
+function Stat({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="exposure-stat" title={hint}>
+      <dt className="eyebrow">{label}</dt>
+      <dd className="num">{value}</dd>
+    </div>
   );
 }
 

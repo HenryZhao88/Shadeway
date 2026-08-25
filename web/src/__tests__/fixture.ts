@@ -162,16 +162,20 @@ export const ROUTE_RESPONSE: RouteResponse = {
   compute_ms: 412,
 };
 
+/** Six hours at 15-minute steps, the window the client actually asks for.
+ *  Shaped like a real afternoon: warms to a peak, then falls away. */
 export const TIMESERIES: TimeseriesResponse = {
   route_id: 'shadeway',
-  points: [
-    {
-      at_iso: DEPART,
-      mean_feels_like_c: 33,
-      max_feels_like_c: 36,
-      sun_fraction: 0.1,
-    },
-  ],
+  points: [33, 34, 35, 36, 35.5, 34, 32, 30, 28, 27, 26, 25].map(
+    (mean, index) => ({
+      at_iso: new Date(
+        new Date(DEPART).getTime() + index * 30 * 60_000,
+      ).toISOString(),
+      mean_feels_like_c: mean,
+      max_feels_like_c: mean + 3,
+      sun_fraction: Math.max(0, 0.4 - index * 0.03),
+    }),
+  ),
 };
 
 export const DEPARTURE_CURVE: DepartureCurveResponse = {

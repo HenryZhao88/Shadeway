@@ -9,6 +9,7 @@ import HeatProfile from './ui/HeatProfile';
 import Hero from './ui/Hero';
 import MapTools from './ui/MapTools';
 import RouteCompare from './ui/RouteCompare';
+import RouteTimeseries from './ui/RouteTimeseries';
 import ThermalStrip from './ui/ThermalStrip';
 import TimeScrubber from './ui/TimeScrubber';
 import TurnList from './ui/TurnList';
@@ -66,6 +67,7 @@ export default function App() {
         <Endpoints />
         <HeatProfile />
         <TurnList />
+        <RouteTimeseries />
         <DepartureCurve />
         <Weather />
         <footer className="block" style={{ borderBottom: 'none' }}>
