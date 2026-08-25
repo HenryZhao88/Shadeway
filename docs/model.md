@@ -183,3 +183,96 @@ shaded stroll at 24 °C is never told to stop and sit down. A stop is offered on
 80 degree-minutes have accumulated — roughly twelve minutes at a felt 33 °C — and
 only if water, a cooling site or a park entrance lies inside a 150 s round-trip
 detour. The accumulator resets after each stop, capped at two per route.
+
+## The heat-vs-time series carries its own weather
+
+`/api/route/{id}/timeseries` walks one fixed route at N times. A cost model
+carries the weather it was constructed with — air temperature, wind, humidity
+and the three irradiance terms — and takes only the *sun position* from the
+timestamp handed to `traverse`. Building a single model for the whole window
+therefore moves the sun across the afternoon while holding the weather frozen at
+the departure hour.
+
+Over the fifteen minutes the endpoint originally spanned that was invisible.
+Over the six-hour window the client now asks for it is not: a 9 pm walk was
+being modelled with 3 pm's air temperature and 183 W/m² of diffuse, which
+flattened the curve into a straight line at the departure temperature. The
+endpoint now builds one model per hour — hourly is the resolution Open-Meteo
+serves and the resolution the weather cache stores, so this costs one UTCI
+lookup table per hour and no extra network. Measured on the Times Square →
+Grand Central route on 2026-08-24, the corrected series falls 26.5 °C → 20.6 °C
+between 15:00 and 21:00 where the frozen version held 26.1 °C throughout.
+
+## What `validate.py` checks, and two things it used to get wrong
+
+**Connectivity is judged per borough.** Manhattan and Brooklyn are not walkable
+to each other in this model: every East River crossing is `rw_type` 3, which
+`cscl.py` excludes. A correct manhattan+brooklyn build is therefore two large
+components, and a scope-wide largest-component check reported 0.673 and failed
+it. Per borough the same build is 0.970 (Manhattan) and 0.976 (Brooklyn).
+
+*Consequence worth stating plainly: you cannot route from Manhattan to Brooklyn.*
+The Brooklyn Bridge walkway is real and is excluded along with the vehicle
+bridges. Including it means admitting selected `rw_type` 3 segments, which is a
+deliberate change nobody has made yet.
+
+**Tau sourcing is three tiers, not two.** The old check counted any
+`tau_source` containing the substring "default" as unsourced — which swept in
+every genus-level entry, because those read *"genus default from Quercus
+palustris (AUF …)"*, a real citation for a real measurement on a congener. That
+reported 23% of the Manhattan canopy as defaulted when the truly unsourced share
+is 6%. Current figures:
+
+| scope | species-level | genus-level | global default |
+|---|---|---|---|
+| Manhattan | 77% | 18% | 6% |
+| Manhattan + Brooklyn | 71% | 21% | 8% |
+
+**Sidewalk widths are not a gap.** `edges.width_m` is null on every edge and
+always will be: both NYC sidewalk datasets are Socrata "map" assets that serve
+null geometry through the API (DATA-FINDINGS #8), and real geometry means the
+planimetric shapefile download, which the earlier investigation judged not worth
+it. The check that used to warn about this every build has been replaced by one
+that measures what those datasets were actually wanted for — whether the
+per-segment offsets came from CSCL `streetwidth` rather than the constant
+fallback. They do, for 98% of Manhattan streets and 97% across both boroughs.
+On a wide avenue that offset is the difference between the two sidewalks being
+13 m and 25 m apart, which is the whole side-of-street claim, so it is the thing
+worth watching.
+
+## What `make warm` actually costs
+
+Measured, not estimated — on this machine (9 worker processes, ~800% CPU
+sustained), warming `manhattan_brooklyn` runs at **121 sample points per second
+across all workers**:
+
+| scope | sample points | resident cache | measured warm |
+|---|---|---|---|
+| Manhattan | 520,741 | 225 MB | ~1 hour |
+| Manhattan + Brooklyn | 1,867,021 | 808 MB | **~4.3 hours** |
+
+The 72,000-sample benchmark that produced the rate: 592.6 s wall, 2,691 s CPU.
+
+Two corrections to `shadeway_design.md` follow from this.
+
+**"about 3 minutes for manhattan plus brooklyn" is out by roughly 85×.** The
+architecture claim around it still holds — warming is an optimisation flag, not
+a separate system, and the code path is identical to a lazy warm — but the
+operational advice ("run it before you present") needs a night, not a coffee.
+Serving cold is supported and degrades gracefully: the cache fills lazily per
+sample point, `/api/health` reports `warm_fraction`, and the client shows a
+banner until it reaches 1.0.
+
+**The resident cache is bigger than the design doc's ~69 MB.** Two reasons: the
+graph carries far more sample points than estimated (crossings are 116,045 of
+Manhattan's 138,439 edges), and the cache is not only the `uint8` horizon store
+— there is also a `float32` canopy-tau array of shape (n, 72), which is twice
+the size of the store. Manhattan: 75 MB store + 150 MB tau. Both boroughs:
+269 MB + 538 MB.
+
+Storing tau as `uint8` would cut those to 37 MB and 134 MB. Transmissivity is a
+number in [0, 1] cited to two decimal places at best, across a literature band
+of 0.08–0.38 with genus-level substitutions for a fifth of the canopy, so
+quantising to 1/255 ≈ 0.004 is far inside its own uncertainty. Not done here
+because it changes the on-disk cache format and invalidates every warmed
+`horizon.npz`.
