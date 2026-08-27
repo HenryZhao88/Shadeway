@@ -12,7 +12,10 @@ Warming an entry costs a few ms (144 rays). Reading one is an array index.
 from __future__ import annotations
 
 import hashlib
+import shutil
+import tempfile
 import threading
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -59,6 +62,7 @@ class HorizonCache:
         self.canopy_tau = np.full((n, AZIMUTH_BINS), 255, dtype=np.uint8)
         self._sample_tree = None
         self._ensure_lock = threading.RLock()
+        self._mapped_cache_dir: tempfile.TemporaryDirectory[str] | None = None
 
     @property
     def nbytes(self) -> int:
@@ -72,6 +76,12 @@ class HorizonCache:
         `legacy_ok` permits the original cache format only when the caller has
         independently verified that the cache file is newer than every source
         parquet. New caches carry an exact source fingerprint."""
+        mapped = self._load_mapped_current(Path(path))
+        if mapped is not None:
+            if mapped:
+                self.warm[:] = True
+            return mapped
+
         try:
             with np.load(path, allow_pickle=False) as data:
                 store = data["store"]
@@ -90,9 +100,13 @@ class HorizonCache:
                     return False
                 if store.dtype != np.uint8:
                     return False
-                self.store[:] = store
+                # npz members are ordinary writable ndarrays once decompressed.
+                # Adopt current-format arrays directly instead of copying 112 MB
+                # into the zero-filled placeholders allocated by __init__. This
+                # keeps startup peak and steady RSS inside small hosts.
+                self.store = store
                 if tau.dtype == np.uint8:
-                    self.canopy_tau[:] = tau
+                    self.canopy_tau = tau
                 else:
                     if tau.dtype.kind not in {"f", "i", "u"}:
                         return False
@@ -108,6 +122,57 @@ class HorizonCache:
         except Exception:
             return False
         self.warm[:] = True
+        return True
+
+    def _load_mapped_current(self, path: Path) -> bool | None:
+        """Stream a v2 npz to disk and memory-map it without a RAM-sized copy.
+
+        ``np.load`` must fully decompress members of a compressed npz. For the
+        Manhattan cache that commits 112 MB immediately and briefly holds a
+        second copy during startup. Extracting the contained ``.npy`` members
+        as streams keeps startup bounded; copy-on-write maps still support the
+        existing invalidation path when planting is enabled.
+
+        ``None`` means this is a legacy artifact and should use the compatibility
+        loader below. ``False`` means it claims to be current but is invalid.
+        """
+        try:
+            archive = zipfile.ZipFile(path)
+        except (OSError, zipfile.BadZipFile):
+            return False
+        with archive:
+            required = {"store.npy", "tau.npy", "fingerprint.npy"}
+            if not required.issubset(archive.namelist()):
+                return None
+            mapped_dir = tempfile.TemporaryDirectory(prefix="shadeway-horizon-")
+            root = Path(mapped_dir.name)
+            try:
+                for member in required:
+                    target = root / member
+                    with archive.open(member) as source, target.open("wb") as dest:
+                        shutil.copyfileobj(source, dest, length=1024 * 1024)
+                store = np.load(root / "store.npy", mmap_mode="c", allow_pickle=False)
+                tau = np.load(root / "tau.npy", mmap_mode="c", allow_pickle=False)
+                encoded = str(
+                    np.load(root / "fingerprint.npy", allow_pickle=False).item()
+                )
+            except (OSError, TypeError, ValueError):
+                mapped_dir.cleanup()
+                return False
+
+        valid = (
+            store.shape == self.store.shape
+            and tau.shape == self.canopy_tau.shape
+            and store.dtype == np.uint8
+            and tau.dtype == np.uint8
+            and (self.fingerprint is None or encoded == self.fingerprint)
+        )
+        if not valid:
+            mapped_dir.cleanup()
+            return False
+        self.store = store
+        self.canopy_tau = tau
+        self._mapped_cache_dir = mapped_dir
         return True
 
     def ensure(self, sample_ids: np.ndarray) -> None:

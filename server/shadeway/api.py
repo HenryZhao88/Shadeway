@@ -262,7 +262,7 @@ def _cost_model(origin_lonlat, when: datetime, walk_speed_ms: float) -> EdgeCost
 
 def _leg(edge_id: int, enter_at: datetime, cost) -> LegStep:
     graph = _state().graph
-    coords = shapely.get_coordinates(graph.geoms[edge_id])
+    coords = shapely.get_coordinates(graph.geometry(edge_id))
     lon, lat = _to_ll.transform(coords[:, 0], coords[:, 1])
     return LegStep(
         edge_id=int(edge_id),
@@ -339,6 +339,10 @@ def _route_locked(request: RouteRequest, state: AppState) -> RouteResponse:
     started = time.perf_counter()
     graph = state.graph
     request_id = str(uuid.uuid4())
+    if not graph.covers(request.origin.lon, request.origin.lat):
+        raise HTTPException(422, "starting point is outside the loaded map area")
+    if not graph.covers(request.destination.lon, request.destination.lat):
+        raise HTTPException(422, "destination is outside the loaded map area")
     origin = graph.nearest_node(request.origin.lon, request.origin.lat)
     destination = graph.nearest_node(request.destination.lon, request.destination.lat)
     if origin == destination:

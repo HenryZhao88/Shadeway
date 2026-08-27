@@ -150,7 +150,9 @@ export default function Endpoints() {
       setAttribution(response.attribution);
       setSearchStatus('ready');
       if (!response.results.length) {
-        setSearchMessage('No NYC places found. Try a street address or landmark.');
+        setSearchMessage(
+          'No Manhattan places found. Try a street address or landmark.',
+        );
       }
     } catch (error) {
       if ((error as Error)?.name === 'AbortError') return;
@@ -400,7 +402,7 @@ function SearchResults({
     <div className="search-results" aria-live="polite">
       {status === 'loading' ? (
         <p className="search-state">
-          <span className="spinner" aria-hidden="true" /> Searching NYC…
+          <span className="spinner" aria-hidden="true" /> Searching Manhattan…
         </p>
       ) : null}
       {message ? <p className="search-state">{message}</p> : null}

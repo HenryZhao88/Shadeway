@@ -7,9 +7,10 @@
 # a function would forget between calls; public images disable it by default.
 #
 # The pipeline is NOT in this image. It downloads gigabytes of NYC open data and
-# runs offline on a laptop; what ships is its output. Build the data first:
+# runs offline; what ships is the validated, warmed Manhattan output committed
+# under data/nyc. Rebuild it only when the source city changes:
 #
-#     make data && make warm
+#     make data && make warm   # optional regeneration
 #     docker build -t shadeway .
 #     docker run --rm -p 8000:8000 shadeway
 #
@@ -59,19 +60,15 @@ RUN pip install --no-deps ./contracts ./server
 # /api/health reports warm_fraction — but the first route through each block
 # pays for its own ray casting, so bake a warmed one in for anything public.
 #
-# Build services such as Render clone only Git-tracked files. The real city is
-# generated output and deliberately stays out of Git, so provide a small
-# fixture city when that output is absent. This makes the default image a
-# working public demo; local/release builds still include any CITY_DIR present
-# in the build context (for example, `make docker` ships data/nyc).
+# Build services such as Render clone only Git-tracked files. The validated,
+# warmed Manhattan runtime artifact is intentionally versioned under data/nyc.
+# Never substitute the synthetic fixture here: its geometries are only for
+# tests and silently serving them on a real map puts buildings in false places.
 ARG CITY_DIR=data/nyc
 COPY . /source
 RUN mkdir -p ./data \
- && if [ -d "/source/${CITY_DIR}" ]; then \
-      cp -a "/source/${CITY_DIR}" ./data/nyc; \
-    else \
-      python -m shadeway_contracts.fixtures --out ./data/nyc; \
-    fi \
+ && python /source/deploy/verify_city.py "/source/${CITY_DIR}" \
+ && cp -a "/source/${CITY_DIR}" ./data/nyc \
  && rm -rf /source
 COPY --from=web /build/web/dist ./web/dist
 

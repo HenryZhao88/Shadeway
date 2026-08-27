@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-NYC_VIEWBOX = "-74.2591,40.9176,-73.7002,40.4774"
+MANHATTAN_VIEWBOX = "-74.0250,40.6980,-73.9060,40.8830"
 ATTRIBUTION = "© OpenStreetMap contributors"
 DEFAULT_USER_AGENT = (
     "shadeway/0.0.1 (+https://github.com/HenryZhao88/Shadeway)"
@@ -81,7 +81,7 @@ class Geocoder:
                         "format": "jsonv2",
                         "addressdetails": 1,
                         "countrycodes": "us",
-                        "viewbox": NYC_VIEWBOX,
+                        "viewbox": MANHATTAN_VIEWBOX,
                         "bounded": 1,
                         "limit": 5,
                     },

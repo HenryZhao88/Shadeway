@@ -1,7 +1,9 @@
-# The raw downloads are ~700 MB and the image needs none of them: the pipeline
-# runs offline and only its output ships.
-data/cache
-data/fixtures
+# The raw downloads and alternate builds are hundreds of MB. The runtime image
+# ships only the validated Manhattan boundary used by the production service.
+data/*
+!data/nyc/
+!data/nyc/**
+data/nyc/horizon.legacy.npz
 
 # Built inside the image, from source.
 node_modules

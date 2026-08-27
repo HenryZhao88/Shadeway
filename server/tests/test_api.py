@@ -95,6 +95,15 @@ def test_route_returns_a_contract_valid_response(client):
     assert parsed.chosen_route_id in parsed.routes
 
 
+def test_route_rejects_points_outside_the_loaded_map(client):
+    body = _body(client) | {
+        "destination": {"lat": 34.0522, "lon": -118.2437},
+    }
+    response = client.post("/api/route", json=body)
+    assert response.status_code == 422
+    assert response.json()["detail"] == "destination is outside the loaded map area"
+
+
 def test_every_leg_reports_its_side_and_its_temperature(client):
     parsed = RouteResponse.model_validate(
         client.post("/api/route", json=_body(client)).json()

@@ -37,5 +37,17 @@ def test_nearest_node_finds_something_close(graph):
     assert graph.nearest_node(float(lon) + 1e-5, float(lat) + 1e-5) == 5
 
 
+def test_coverage_rejects_points_far_outside_the_loaded_graph(graph):
+    lon, lat = graph.node_lonlat[5]
+    assert graph.covers(float(lon), float(lat))
+    assert not graph.covers(float(lon) + 1.0, float(lat) + 1.0)
+
+
+def test_edge_geometry_is_decoded_lazily_from_compact_wkb(graph):
+    assert graph.geom_wkb
+    assert isinstance(graph.geom_wkb[0], bytes)
+    assert not graph.geometry(0).is_empty
+
+
 def test_sample_ranges_are_within_bounds(graph):
     assert (graph.sample_start + graph.sample_count).max() <= graph.n_samples

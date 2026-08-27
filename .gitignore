@@ -48,6 +48,21 @@ artifacts/
 *.duckdb
 *.duckdb.wal
 
+# The production container needs one validated, warmed Manhattan artifact.
+# Keep every other raw/generated dataset ignored; these seven files are the
+# intentionally versioned runtime boundary used by Git-based cloud builds.
+!data/
+data/*
+!data/nyc/
+data/nyc/*
+!data/nyc/amenities.parquet
+!data/nyc/buildings.parquet
+!data/nyc/edges.parquet
+!data/nyc/horizon.npz
+!data/nyc/nodes.parquet
+!data/nyc/samples.parquet
+!data/nyc/trees.parquet
+
 # os / editor
 .DS_Store
 Thumbs.db

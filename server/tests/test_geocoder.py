@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from shadeway.geocoder import NYC_VIEWBOX, Geocoder, GeocoderUnavailable
+from shadeway.geocoder import MANHATTAN_VIEWBOX, Geocoder, GeocoderUnavailable
 
 
 class FakeResponse:
@@ -15,7 +15,7 @@ class FakeResponse:
         return self.payload
 
 
-def test_search_uses_a_bounded_nyc_query_and_identifying_agent(monkeypatch):
+def test_search_uses_a_bounded_manhattan_query_and_identifying_agent(monkeypatch):
     calls = []
 
     def fake_get(url, params=None, headers=None, timeout=None):
@@ -45,7 +45,7 @@ def test_search_uses_a_bounded_nyc_query_and_identifying_agent(monkeypatch):
     _, params, headers, timeout = calls[0]
     assert params["q"] == "Bryant Park"
     assert params["bounded"] == 1
-    assert params["viewbox"] == NYC_VIEWBOX
+    assert params["viewbox"] == MANHATTAN_VIEWBOX
     assert params["limit"] == 5
     assert "Shadeway" in headers["User-Agent"]
     assert timeout == 8.0

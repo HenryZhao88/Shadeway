@@ -6,6 +6,7 @@ neighbour lists.
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,7 +31,10 @@ class Graph:
     sample_start: np.ndarray
     sample_count: np.ndarray
     street_names: list[str]
-    geoms: list[object]
+    # WKB stays compact at rest. Expanding every edge into a Shapely object at
+    # startup costs well over 100 MB on Manhattan even though a response only
+    # touches the handful of edges in its selected routes.
+    geom_wkb: list[bytes]
     sample_xy: np.ndarray  # (n_samples, 2)
     sample_albedo: np.ndarray
     adj_offsets: np.ndarray
@@ -78,8 +82,11 @@ class Graph:
             edge_bearing_deg=np.asarray(edges.column("bearing_deg"), dtype=np.float32),
             sample_start=np.asarray(edges.column("sample_start"), dtype=np.int64),
             sample_count=np.asarray(edges.column("sample_count"), dtype=np.int64),
-            street_names=edges.column("street_name").to_pylist(),
-            geoms=list(shapely.from_wkb(edges.column("geom_wkb").to_pylist())),
+            street_names=[
+                sys.intern(name or "")
+                for name in edges.column("street_name").to_pylist()
+            ],
+            geom_wkb=edges.column("geom_wkb").to_pylist(),
             sample_xy=np.column_stack(
                 [np.asarray(samples.column("x_m")), np.asarray(samples.column("y_m"))]
             ),
@@ -101,6 +108,16 @@ class Graph:
         )
         return int(np.argmin(d))
 
+    def covers(self, lon: float, lat: float, margin_deg: float = 0.005) -> bool:
+        """Whether a point belongs to this graph's geographic service area."""
+        west, south = np.min(self.node_lonlat, axis=0) - margin_deg
+        east, north = np.max(self.node_lonlat, axis=0) + margin_deg
+        return bool(west <= lon <= east and south <= lat <= north)
+
     def sample_ids(self, edge_id: int) -> np.ndarray:
         start = int(self.sample_start[edge_id])
         return np.arange(start, start + int(self.sample_count[edge_id]), dtype=np.int64)
+
+    def geometry(self, edge_id: int):
+        """Decode one route edge on demand instead of the entire city."""
+        return shapely.from_wkb(self.geom_wkb[edge_id])

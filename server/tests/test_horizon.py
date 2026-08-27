@@ -113,6 +113,8 @@ def test_precomputed_cache_accepts_matching_fingerprint(cache, tmp_path):
     target = HorizonCache(cache.scene, cache.samples_xy, fingerprint="expected-build")
     assert target.load_precomputed(path)
     assert target.warm.all()
+    assert isinstance(target.store, np.memmap)
+    assert isinstance(target.canopy_tau, np.memmap)
 
 
 def test_trusted_legacy_float_tau_is_quantised_on_load(cache, tmp_path):
