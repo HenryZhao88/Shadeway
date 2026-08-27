@@ -14,6 +14,11 @@ function reset() {
     ...INITIAL,
     origin: DEFAULT_ORIGIN,
     destination: DEFAULT_DESTINATION,
+    currentLocation: null,
+    originMode: 'custom',
+    locationStatus: 'idle',
+    locationError: null,
+    locationFocus: 0,
     route: null,
     routeStatus: 'idle',
     routeError: null,
@@ -39,6 +44,18 @@ afterEach(() => {
 });
 
 describe('fetchRoute', () => {
+  test('waits for a real start and destination instead of routing a preset', async () => {
+    const spy = vi.fn(mockFetch());
+    vi.stubGlobal('fetch', spy);
+    useStore.setState({ origin: null, destination: null });
+
+    await useStore.getState().fetchRoute();
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(useStore.getState().route).toBeNull();
+    expect(useStore.getState().routeError).toMatch(/starting point/i);
+  });
+
   test('stores the response and marks itself ready', async () => {
     await useStore.getState().fetchRoute();
     const state = useStore.getState();
@@ -71,7 +88,7 @@ describe('fetchRoute', () => {
     await useStore.getState().fetchRoute();
     const state = useStore.getState();
     expect(state.routeStatus).toBe('error');
-    expect(state.routeError).toMatch(/make serve/);
+    expect(state.routeError).toMatch(/check your connection/i);
   });
 
   test('surfaces the server\'s own explanation for a rejected request', async () => {
@@ -123,6 +140,68 @@ describe('fetchRoute', () => {
     for (const [url] of calls) {
       expect(String(url)).toContain('request_id=test-request');
     }
+  });
+
+  test('calculates automatically when the destination completes the trip', async () => {
+    const spy = vi.fn(mockFetch());
+    vi.stubGlobal('fetch', spy);
+    useStore.setState({ origin: DEFAULT_ORIGIN, destination: null });
+
+    useStore.getState().setPlace('destination', DEFAULT_DESTINATION);
+
+    await vi.waitFor(() => {
+      expect(useStore.getState().routeStatus).toBe('ready');
+    });
+    expect(
+      spy.mock.calls.filter(([url]) => String(url).endsWith('/api/route')),
+    ).toHaveLength(1);
+  });
+});
+
+describe('current location', () => {
+  test('uses the first live fix as the start and asks for a destination', () => {
+    useStore.setState({
+      origin: null,
+      destination: null,
+      currentLocation: null,
+      originMode: 'current',
+      pickMode: 'none',
+    });
+
+    useStore.getState().updateCurrentLocation({
+      lat: 40.756,
+      lon: -73.982,
+      accuracyM: 14,
+      label: 'Your location',
+    });
+
+    expect(useStore.getState().origin?.label).toBe('Your location');
+    expect(useStore.getState().locationStatus).toBe('tracking');
+    expect(useStore.getState().pickMode).toBe('destination');
+  });
+
+  test('routes from the latest fix when the user recalculates', async () => {
+    const spy = vi.fn(mockFetch());
+    vi.stubGlobal('fetch', spy);
+    useStore.setState({
+      origin: DEFAULT_ORIGIN,
+      destination: DEFAULT_DESTINATION,
+      currentLocation: {
+        lat: 40.761,
+        lon: -73.981,
+        accuracyM: 8,
+        label: 'Your location',
+      },
+      originMode: 'current',
+    });
+
+    await useStore.getState().fetchRoute();
+
+    const call = spy.mock.calls.find(([url]) =>
+      String(url).endsWith('/api/route'),
+    );
+    const body = JSON.parse(String(call?.[1]?.body));
+    expect(body.origin).toEqual({ lat: 40.761, lon: -73.981 });
   });
 });
 
@@ -240,9 +319,11 @@ describe('viewport data', () => {
 describe('swapping the ends', () => {
   test('exchanges origin and destination', async () => {
     const { origin, destination } = useStore.getState();
+    expect(origin).not.toBeNull();
+    expect(destination).not.toBeNull();
     useStore.getState().swapEnds();
-    expect(useStore.getState().origin.label).toBe(destination.label);
-    expect(useStore.getState().destination.label).toBe(origin.label);
+    expect(useStore.getState().origin?.label).toBe(destination!.label);
+    expect(useStore.getState().destination?.label).toBe(origin!.label);
   });
 });
 

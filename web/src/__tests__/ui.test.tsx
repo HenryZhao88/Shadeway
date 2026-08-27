@@ -14,7 +14,11 @@ import RouteTimeseries from '../ui/RouteTimeseries';
 import ThermalStrip from '../ui/ThermalStrip';
 import TurnList from '../ui/TurnList';
 import Weather from '../ui/Weather';
-import { useStore } from '../state/store';
+import {
+  DEFAULT_DESTINATION,
+  DEFAULT_ORIGIN,
+  useStore,
+} from '../state/store';
 import {
   DEPARTURE_CURVE,
   FASTEST,
@@ -31,6 +35,8 @@ function loadRoute(overrides: Partial<typeof INITIAL> = {}) {
   useStore.setState({
     ...INITIAL,
     route: ROUTE_RESPONSE,
+    origin: DEFAULT_ORIGIN,
+    destination: DEFAULT_DESTINATION,
     routeStatus: 'ready',
     routeError: null,
     routeGeneration: 1,

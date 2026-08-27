@@ -66,7 +66,11 @@ export interface Place extends LatLon {
   label: string;
 }
 
-/** Midtown at 3pm — the opening frame of the demo. */
+export interface CurrentLocation extends Place {
+  accuracyM: number;
+}
+
+/** Named points for the optional sample trip and the pre-route solar display. */
 export const DEFAULT_ORIGIN: Place = {
   lat: 40.758,
   lon: -73.9855,
@@ -80,10 +84,23 @@ export const DEFAULT_DESTINATION: Place = {
 
 export type Status = 'idle' | 'loading' | 'ready' | 'error';
 export type PickMode = 'none' | 'origin' | 'destination' | 'plant';
+export type LocationStatus =
+  | 'idle'
+  | 'requesting'
+  | 'tracking'
+  | 'denied'
+  | 'unavailable';
+export type OriginMode = 'custom' | 'current';
 
 interface State {
-  origin: Place;
-  destination: Place;
+  origin: Place | null;
+  destination: Place | null;
+  currentLocation: CurrentLocation | null;
+  originMode: OriginMode;
+  locationStatus: LocationStatus;
+  locationError: string | null;
+  /** Incremented when the map should move back to the live location. */
+  locationFocus: number;
   scrubAt: Date;
   departAt: Date;
   profileKey: ProfileKey;
@@ -117,6 +134,11 @@ interface State {
   setScrubAt: (when: Date) => void;
   commitDeparture: () => void;
   setPlace: (which: 'origin' | 'destination', place: Place) => void;
+  setTrip: (origin: Place, destination: Place) => void;
+  selectCurrentLocation: () => void;
+  updateCurrentLocation: (place: CurrentLocation) => void;
+  setLocationStatus: (status: LocationStatus, error?: string | null) => void;
+  focusCurrentLocation: () => void;
   swapEnds: () => void;
   setProfile: (key: ProfileKey) => void;
   setWalkSpeed: (ms: number) => void;
@@ -165,8 +187,13 @@ function aborted(error: unknown): boolean {
 }
 
 export const useStore = create<State>((set, get) => ({
-  origin: DEFAULT_ORIGIN,
-  destination: DEFAULT_DESTINATION,
+  origin: null,
+  destination: null,
+  currentLocation: null,
+  originMode: 'custom',
+  locationStatus: 'idle',
+  locationError: null,
+  locationFocus: 0,
   scrubAt: initialDeparture(),
   departAt: initialDeparture(),
   profileKey: 'standard',
@@ -204,18 +231,97 @@ export const useStore = create<State>((set, get) => ({
     const { scrubAt, departAt } = get();
     if (Math.abs(scrubAt.getTime() - departAt.getTime()) < 30_000) return;
     set({ departAt: new Date(scrubAt) });
-    void get().fetchRoute();
+    if (get().origin && get().destination) void get().fetchRoute();
   },
 
   setPlace: (which, place) => {
-    set({ [which]: place, pickMode: 'none' } as Partial<State>);
+    set({
+      [which]: place,
+      ...(which === 'origin' ? { originMode: 'custom' as const } : {}),
+      pickMode: 'none',
+      route: null,
+      routeStatus: 'idle',
+      routeError: null,
+      timeseries: {},
+      timeseriesStatus: 'idle',
+      departure: null,
+      departureStatus: 'idle',
+      overrideRouteId: null,
+    } as Partial<State>);
     set({ scrubAt: get().departAt });
+    if (get().origin && get().destination) void get().fetchRoute();
+  },
+
+  setTrip: (origin, destination) => {
+    set({
+      origin,
+      destination,
+      originMode: 'custom',
+      pickMode: 'none',
+      route: null,
+      routeStatus: 'idle',
+      routeError: null,
+      timeseries: {},
+      timeseriesStatus: 'idle',
+      departure: null,
+      departureStatus: 'idle',
+      overrideRouteId: null,
+    });
     void get().fetchRoute();
   },
 
+  selectCurrentLocation: () => {
+    const current = get().currentLocation;
+    set({
+      origin: current,
+      originMode: 'current',
+      pickMode: current && !get().destination ? 'destination' : 'none',
+      route: null,
+      routeStatus: 'idle',
+      routeError: null,
+      timeseries: {},
+      timeseriesStatus: 'idle',
+      departure: null,
+      departureStatus: 'idle',
+      overrideRouteId: null,
+      locationFocus: get().locationFocus + (current ? 1 : 0),
+    });
+    if (current && get().destination) void get().fetchRoute();
+  },
+
+  updateCurrentLocation: (place) => {
+    const state = get();
+    const firstFix = state.currentLocation === null;
+    const adoptAsOrigin = state.originMode === 'current' && !state.route;
+    set({
+      currentLocation: place,
+      locationStatus: 'tracking',
+      locationError: null,
+      ...(adoptAsOrigin ? { origin: place } : {}),
+      ...(adoptAsOrigin && !state.destination
+        ? { pickMode: 'destination' as const }
+        : {}),
+      locationFocus: state.locationFocus + (firstFix ? 1 : 0),
+    });
+    if (
+      adoptAsOrigin &&
+      state.destination &&
+      state.routeStatus !== 'loading'
+    ) {
+      void get().fetchRoute();
+    }
+  },
+
+  setLocationStatus: (status, error = null) =>
+    set({ locationStatus: status, locationError: error }),
+
+  focusCurrentLocation: () =>
+    set({ locationFocus: get().locationFocus + 1 }),
+
   swapEnds: () => {
     const { origin, destination } = get();
-    set({ origin: destination, destination: origin });
+    if (!origin || !destination) return;
+    set({ origin: destination, destination: origin, originMode: 'custom' });
     void get().fetchRoute();
   },
 
@@ -237,7 +343,7 @@ export const useStore = create<State>((set, get) => ({
 
   setWalkSpeed: (ms) => {
     set({ walkSpeedMs: ms });
-    void get().fetchRoute();
+    if (get().origin && get().destination) void get().fetchRoute();
   },
 
   setPickMode: (mode) => set({ pickMode: mode }),
@@ -250,12 +356,32 @@ export const useStore = create<State>((set, get) => ({
     timeseriesAbort?.abort();
     routeAbort = new AbortController();
     const signal = routeAbort.signal;
-    const { origin, destination, departAt, profileKey, walkSpeedMs } = get();
+    const {
+      origin,
+      destination,
+      currentLocation,
+      originMode,
+      departAt,
+      profileKey,
+      walkSpeedMs,
+    } = get();
+    const routeOrigin =
+      originMode === 'current' && currentLocation ? currentLocation : origin;
+    if (!routeOrigin || !destination) {
+      set({
+        routeStatus: 'idle',
+        routeError: !routeOrigin
+          ? 'Use your location or choose a starting point.'
+          : 'Choose a destination on the map.',
+      });
+      return;
+    }
+    if (routeOrigin !== origin) set({ origin: routeOrigin });
     const profile = PROFILES[profileKey]!;
     set({ routeStatus: 'loading', routeError: null });
     try {
       const response = await postRoute({
-        origin: { lat: origin.lat, lon: origin.lon },
+        origin: { lat: routeOrigin.lat, lon: routeOrigin.lon },
         destination: { lat: destination.lat, lon: destination.lon },
         departAt,
         profile: {
@@ -304,6 +430,7 @@ export const useStore = create<State>((set, get) => ({
     departureAbort = new AbortController();
     const signal = departureAbort.signal;
     const { origin, destination, departAt, walkSpeedMs } = get();
+    if (!origin || !destination) return;
     set({ departureStatus: 'loading' });
     try {
       const response = await getDepartureCurve(

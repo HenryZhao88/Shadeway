@@ -239,6 +239,49 @@ export function endpointLayer(data: EndpointDatum[]) {
   });
 }
 
+export interface CurrentLocationDatum {
+  position: [number, number];
+  accuracyM: number;
+}
+
+/** The familiar blue location dot and its reported GPS accuracy. The accuracy
+ * halo is in metres, while the dot stays a readable screen size at every zoom. */
+export function currentLocationLayers(location: CurrentLocationDatum | null) {
+  const data = location ? [location] : [];
+  return [
+    new ScatterplotLayer<CurrentLocationDatum>({
+      id: 'current-location-accuracy',
+      data,
+      getPosition: (d) => d.position,
+      getRadius: (d) => Math.max(8, d.accuracyM),
+      radiusUnits: 'meters',
+      radiusMinPixels: 12,
+      radiusMaxPixels: 72,
+      getFillColor: [66, 133, 244, 38],
+      stroked: true,
+      lineWidthUnits: 'pixels',
+      getLineWidth: 1,
+      getLineColor: [111, 168, 255, 100],
+      pickable: false,
+      parameters: ALWAYS_ON_TOP,
+    }),
+    new ScatterplotLayer<CurrentLocationDatum>({
+      id: 'current-location',
+      data,
+      getPosition: (d) => d.position,
+      getRadius: 7,
+      radiusUnits: 'pixels',
+      getFillColor: [66, 133, 244, 255],
+      stroked: true,
+      lineWidthUnits: 'pixels',
+      getLineWidth: 2.5,
+      getLineColor: [232, 237, 242, 255],
+      pickable: true,
+      parameters: ALWAYS_ON_TOP,
+    }),
+  ];
+}
+
 /** Amenity pins. Cool water is the one thing on this map allowed to use the
  *  cool end of the heat ramp, because that is exactly what it is: relief. */
 const AMENITY_COLOR: Record<number, Rgba> = {

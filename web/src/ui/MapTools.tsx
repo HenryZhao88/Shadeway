@@ -18,10 +18,22 @@ export default function MapTools() {
   const lastPlant = useStore((s) => s.lastPlant);
   const buildingsTruncated = useStore((s) => s.buildingsTruncated);
   const plantingEnabled = useStore((s) => s.health?.planting_enabled ?? false);
+  const currentLocation = useStore((s) => s.currentLocation);
+  const focusCurrentLocation = useStore((s) => s.focusCurrentLocation);
 
   return (
     <>
       <div className="map-overlay map-tools">
+        {currentLocation ? (
+          <button
+            type="button"
+            className="ghost-button location-control"
+            onClick={focusCurrentLocation}
+          >
+            <span className="location-target" aria-hidden="true" />
+            Center on me
+          </button>
+        ) : null}
         <button
           type="button"
           className="ghost-button"

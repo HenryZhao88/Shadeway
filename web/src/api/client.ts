@@ -80,7 +80,10 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
     if ((cause as Error)?.name === 'AbortError') throw cause;
     // A dead server is the single most likely failure on demo day, so it gets
     // a sentence a person can act on rather than "Failed to fetch".
-    throw new ApiError(0, 'Cannot reach the shadeway server. Is `make serve` running?');
+    throw new ApiError(
+      0,
+      'Cannot reach shadeway right now. Check your connection and try again.',
+    );
   }
   if (!response.ok) {
     throw new ApiError(response.status, await detail(response));

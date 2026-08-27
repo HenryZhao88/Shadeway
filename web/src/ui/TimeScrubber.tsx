@@ -13,7 +13,7 @@
 
 import { useMemo } from 'react';
 
-import { useStore } from '../state/store';
+import { DEFAULT_ORIGIN, useStore } from '../state/store';
 import {
   clock,
   daylightWindow,
@@ -31,7 +31,8 @@ export default function TimeScrubber() {
   const scrubAt = useStore((s) => s.scrubAt);
   const departAt = useStore((s) => s.departAt);
   const setScrubAt = useStore((s) => s.setScrubAt);
-  const origin = useStore((s) => s.origin);
+  const selectedOrigin = useStore((s) => s.origin);
+  const origin = selectedOrigin ?? DEFAULT_ORIGIN;
   const status = useStore((s) => s.routeStatus);
 
   const track = useMemo(

@@ -27,18 +27,16 @@ const DAY = new Intl.DateTimeFormat(undefined, {
 
 export default function App() {
   const scrubAt = useStore((s) => s.scrubAt);
-  const routeError = useStore((s) => s.routeError);
+  const route = useStore((s) => s.route);
   const health = useStore((s) => s.health);
-  const fetchRoute = useStore((s) => s.fetchRoute);
   const fetchHealth = useStore((s) => s.fetchHealth);
 
   useEffect(() => {
     void fetchHealth();
-    void fetchRoute();
-  }, [fetchHealth, fetchRoute]);
+  }, [fetchHealth]);
 
   return (
-    <div className="app">
+    <div className={`app ${route ? 'has-route' : 'planning'}`}>
       <header className="topbar">
         <p className="wordmark">
           shade<span>way</span>
@@ -54,11 +52,6 @@ export default function App() {
       </header>
 
       <aside className="rail" aria-label="Route details">
-        {routeError ? (
-          <p className="banner" role="alert">
-            {routeError}
-          </p>
-        ) : null}
         {health && !health.cache_warm ? (
           <p className="banner calm">
             The horizon cache is {Math.round(health.warm_fraction * 100)}% warm.
@@ -69,7 +62,6 @@ export default function App() {
         <Hero />
         <ThermalStrip />
         <RouteCompare />
-        <Endpoints />
         <HeatProfile />
         <TurnList />
         <RouteTimeseries />
@@ -94,6 +86,7 @@ export default function App() {
         >
           <MapCanvas />
         </Suspense>
+        <Endpoints />
         <MapTools />
       </main>
 

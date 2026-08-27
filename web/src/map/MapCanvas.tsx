@@ -20,6 +20,7 @@ import { BASEMAP_URL, FALLBACK_STYLE, INITIAL_VIEW } from './basemapStyle';
 import {
   amenityLayer,
   buildingLayer,
+  currentLocationLayers,
   endpointLayer,
   routeLayers,
   shadowLayer,
@@ -66,14 +67,19 @@ export default function MapCanvas() {
   const lastBbox = useRef<string>('');
   const retryBbox = useRef<string>('');
   const retryCount = useRef(0);
+  const lastLocationFocus = useRef(0);
+  const lastRouteGeneration = useRef(0);
 
   const scrubAt = useStore((s) => s.scrubAt);
   const route = useStore((s) => s.route);
+  const routeGeneration = useStore((s) => s.routeGeneration);
   const buildings = useStore((s) => s.buildings);
   const amenities = useStore((s) => s.amenities);
   const showAmenities = useStore((s) => s.showAmenities);
   const origin = useStore((s) => s.origin);
   const destination = useStore((s) => s.destination);
+  const currentLocation = useStore((s) => s.currentLocation);
+  const locationFocus = useStore((s) => s.locationFocus);
   const pickMode = useStore((s) => s.pickMode);
   const hoveredLegIndex = useStore((s) => s.hoveredLegIndex);
   const chosenId = useStore(chosenRouteId);
@@ -84,6 +90,38 @@ export default function MapCanvas() {
 
   const bbox = useMemo<Bbox>(() => bboxFor(viewState), [viewState]);
   const budget = useMemo(() => renderBudget(viewState), [viewState]);
+
+  useEffect(() => {
+    if (
+      !currentLocation ||
+      locationFocus === 0 ||
+      locationFocus === lastLocationFocus.current
+    ) {
+      return;
+    }
+    lastLocationFocus.current = locationFocus;
+    setViewState((current) => ({
+      ...current,
+      longitude: currentLocation.lon,
+      latitude: currentLocation.lat,
+      zoom: Math.max(current.zoom, 15.4),
+      pitch: 38,
+      bearing: 0,
+    }));
+  }, [currentLocation, locationFocus]);
+
+  useEffect(() => {
+    if (
+      !route ||
+      !origin ||
+      !destination ||
+      routeGeneration === lastRouteGeneration.current
+    ) {
+      return;
+    }
+    lastRouteGeneration.current = routeGeneration;
+    setViewState((current) => fitRoute(current, origin, destination));
+  }, [destination, origin, route, routeGeneration]);
 
   // The sun, from the same client-side solar code the readouts use. Dragging
   // the scrubber recomputes this and the shadows below at frame rate, without
@@ -148,18 +186,21 @@ export default function MapCanvas() {
   const layers = useMemo(() => {
     const routes = route ? Object.values(route.routes) : [];
     const chosen = chosenId ? route?.routes[chosenId] : undefined;
-    const endpoints: EndpointDatum[] = [
-      {
+    const endpoints: EndpointDatum[] = [];
+    if (origin) {
+      endpoints.push({
         position: [origin.lon, origin.lat],
         kind: 'origin',
         label: origin.label,
-      },
-      {
+      });
+    }
+    if (destination) {
+      endpoints.push({
         position: [destination.lon, destination.lat],
         kind: 'destination',
         label: destination.label,
-      },
-    ];
+      });
+    }
     return [
       sunlitGroundLayer(bbox, sun.elevationDeg),
       ...(budget.showShadows ? [shadowLayer(shadows)] : []),
@@ -168,6 +209,14 @@ export default function MapCanvas() {
       ...routeLayers(routes, chosenId, hoveredLegIndex),
       ...(chosen?.waypoints.length ? [waypointLayer(chosen.waypoints)] : []),
       endpointLayer(endpoints),
+      ...currentLocationLayers(
+        currentLocation
+          ? {
+              position: [currentLocation.lon, currentLocation.lat],
+              accuracyM: currentLocation.accuracyM,
+            }
+          : null,
+      ),
     ];
   }, [
     amenities,
@@ -175,6 +224,7 @@ export default function MapCanvas() {
     bbox,
     buildings,
     chosenId,
+    currentLocation,
     destination,
     hoveredLegIndex,
     origin,
@@ -201,22 +251,32 @@ export default function MapCanvas() {
 
   const onClick = useCallback(
     (info: PickingInfo) => {
-      if (pickMode === 'none' || !info.coordinate) return;
+      if (!info.coordinate) return;
       const [lon, lat] = info.coordinate as [number, number];
       if (pickMode === 'plant') {
         void plant([{ lat, lon }]);
         return;
       }
-      setPlace(pickMode, {
+      const mode =
+        pickMode !== 'none'
+          ? pickMode
+          : !origin
+            ? 'origin'
+            : !destination
+              ? 'destination'
+              : null;
+      if (!mode) return;
+      setPlace(mode, {
         lat,
         lon,
-        label: `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+        label: pickedLabel(info),
       });
     },
-    [pickMode, plant, setPlace],
+    [destination, origin, pickMode, plant, setPlace],
   );
 
-  const cursor = pickMode === 'none' ? 'grab' : 'crosshair';
+  const cursor =
+    pickMode === 'none' && origin && destination ? 'grab' : 'crosshair';
 
   return (
     <>
@@ -313,7 +373,35 @@ function describe(info: PickingInfo): string[] | null {
     const endpoint = info.object as EndpointDatum;
     return [endpoint.label, endpoint.kind === 'origin' ? 'start' : 'finish'];
   }
+  if (id === 'current-location') return ['Your location', 'live GPS position'];
   return null;
+}
+
+function pickedLabel(info: PickingInfo): string {
+  if (info.layer?.id === 'amenities') {
+    const amenity = info.object as Amenity;
+    return amenity.name || AMENITY_LABEL[amenity.kind] || 'Selected place';
+  }
+  return 'Dropped pin';
+}
+
+function fitRoute(
+  current: ViewState,
+  origin: { lat: number; lon: number },
+  destination: { lat: number; lon: number },
+): ViewState {
+  const lonSpan = Math.max(0.001, Math.abs(origin.lon - destination.lon));
+  const latSpan = Math.max(0.001, Math.abs(origin.lat - destination.lat));
+  const span = Math.max(lonSpan, latSpan / 0.62);
+  const zoom = Math.max(12.5, Math.min(16.7, Math.log2(360 / (span * 2.4))));
+  return {
+    ...current,
+    longitude: (origin.lon + destination.lon) / 2,
+    latitude: (origin.lat + destination.lat) / 2,
+    zoom,
+    pitch: 40,
+    bearing: 0,
+  };
 }
 
 /** Approximate viewport bounds from the camera. Exact bounds would need the

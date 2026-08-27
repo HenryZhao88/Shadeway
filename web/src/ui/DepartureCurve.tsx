@@ -20,7 +20,7 @@
 import { useMemo, useState } from 'react';
 
 import { degrees, heatCss } from '../heat';
-import { useStore } from '../state/store';
+import { DEFAULT_ORIGIN, useStore } from '../state/store';
 import { clock, daylightWindow } from '../sun/position';
 import type { DeparturePoint } from '../api/types';
 
@@ -32,7 +32,7 @@ export default function DepartureCurve() {
   const departure = useStore((s) => s.departure);
   const status = useStore((s) => s.departureStatus);
   const setScrubAt = useStore((s) => s.setScrubAt);
-  const origin = useStore((s) => s.origin);
+  const origin = useStore((s) => s.origin) ?? DEFAULT_ORIGIN;
   const [hover, setHover] = useState<number | null>(null);
   const [showTable, setShowTable] = useState(false);
 
