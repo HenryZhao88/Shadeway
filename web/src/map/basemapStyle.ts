@@ -27,13 +27,13 @@ export const FALLBACK_STYLE: StyleSpecification = {
   glyphs: undefined,
 };
 
-/** Midtown, framed on the demo route. Close enough that a 1 km walk fills the
- *  frame and the shadows have readable edges; pitched enough that the towers
- *  casting them are visible as towers. */
+/** Manhattan in context, rather than a single Midtown block. The opening view
+ * makes it clear that this is a city-scale map; zooming in brings the shadow
+ * model down to the individual building. */
 export const INITIAL_VIEW = {
   longitude: -73.9812,
-  latitude: 40.7553,
-  zoom: 15.4,
-  pitch: 44,
-  bearing: -20,
+  latitude: 40.745,
+  zoom: 11.7,
+  pitch: 34,
+  bearing: -16,
 } as const;

@@ -47,7 +47,9 @@ export default function App() {
         <div className="topbar-meta eyebrow">
           <span>{DAY.format(scrubAt)}</span>
           <span className="num">{clock(scrubAt)}</span>
-          <span>{health ? 'manhattan' : 'offline'}</span>
+          <span className={health ? 'scene-status' : 'scene-status offline'}>
+            {health ? 'NYC scene' : 'offline'}
+          </span>
         </div>
       </header>
 

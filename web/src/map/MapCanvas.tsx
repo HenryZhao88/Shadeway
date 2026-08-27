@@ -41,6 +41,18 @@ interface ViewState {
  *  no visual gain, so wait for the camera to settle. */
 const VIEW_SETTLE_MS = 260;
 const MAX_VIEW_RETRIES = 5;
+const STREET_DETAIL_ZOOM = 14.1;
+
+/** At city scale, a complete Manhattan building layer is dramatically more
+ * useful than a handful of blocks. The client deliberately skips shadows at
+ * this scale: sweeping thousands of tiny roofs makes an unreadable dark field.
+ * At street scale, it switches back to every available occluder and exact,
+ * moving shadows. */
+function renderBudget(view: ViewState) {
+  if (view.zoom < 12.5) return { buildings: 11000, showShadows: false };
+  if (view.zoom < STREET_DETAIL_ZOOM) return { buildings: 6500, showShadows: false };
+  return { buildings: 3600, showShadows: true };
+}
 
 export default function MapCanvas() {
   const [viewState, setViewState] = useState<ViewState>({ ...INITIAL_VIEW });
@@ -71,6 +83,7 @@ export default function MapCanvas() {
   const fetchViewportData = useStore((s) => s.fetchViewportData);
 
   const bbox = useMemo<Bbox>(() => bboxFor(viewState), [viewState]);
+  const budget = useMemo(() => renderBudget(viewState), [viewState]);
 
   // The sun, from the same client-side solar code the readouts use. Dragging
   // the scrubber recomputes this and the shadows below at frame rate, without
@@ -80,8 +93,8 @@ export default function MapCanvas() {
     [scrubAt, viewState.latitude, viewState.longitude],
   );
   const shadows = useMemo(
-    () => shadowPolygons(buildings, sun, viewState.latitude),
-    [buildings, sun, viewState.latitude],
+    () => (budget.showShadows ? shadowPolygons(buildings, sun, viewState.latitude) : []),
+    [budget.showShadows, buildings, sun, viewState.latitude],
   );
 
   const requestViewportData = useCallback(
@@ -96,7 +109,7 @@ export default function MapCanvas() {
           retryCount.current = 0;
         }
         lastBbox.current = key;
-        void fetchViewportData(box).then((ok) => {
+        void fetchViewportData(box, renderBudget(next).buildings).then((ok) => {
           if (ok) {
             retryCount.current = 0;
             return;
@@ -149,7 +162,7 @@ export default function MapCanvas() {
     ];
     return [
       sunlitGroundLayer(bbox, sun.elevationDeg),
-      shadowLayer(shadows),
+      ...(budget.showShadows ? [shadowLayer(shadows)] : []),
       buildingLayer(buildings),
       ...(showAmenities ? [amenityLayer(amenities)] : []),
       ...routeLayers(routes, chosenId, hoveredLegIndex),
@@ -158,6 +171,7 @@ export default function MapCanvas() {
     ];
   }, [
     amenities,
+    budget.showShadows,
     bbox,
     buildings,
     chosenId,
@@ -263,6 +277,12 @@ export default function MapCanvas() {
           <span>pins</span>
           <b>{showAmenities ? amenities.length : 0}</b>
         </div>
+      </div>
+
+      <div className="map-overlay map-context" aria-hidden="true">
+        <span className="eyebrow">New York City</span>
+        <b>{budget.showShadows ? 'street shade' : 'city overview'}</b>
+        <span>{budget.showShadows ? 'live building shadows' : 'zoom in for live shadows'}</span>
       </div>
     </>
   );

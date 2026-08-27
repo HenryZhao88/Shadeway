@@ -62,7 +62,8 @@ export default function MapTools() {
         </p>
       ) : buildingsTruncated ? (
         <p className="map-overlay map-hint">
-          Zoom in — only the tallest buildings in view are being drawn.
+          City overview is prioritising the tallest buildings. Zoom in for the
+          complete street scene and live shadows.
         </p>
       ) : null}
     </>

@@ -129,7 +129,7 @@ interface State {
   fetchTimeseries: () => Promise<void>;
   fetchDeparture: () => Promise<void>;
   /** Resolves false when the fetch failed, so the caller can retry. */
-  fetchViewportData: (bbox: Bbox) => Promise<boolean>;
+  fetchViewportData: (bbox: Bbox, maxFeatures?: number) => Promise<boolean>;
   fetchHealth: () => Promise<void>;
   plant: (positions: LatLon[]) => Promise<void>;
 }
@@ -322,14 +322,14 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  fetchViewportData: async (bbox) => {
+  fetchViewportData: async (bbox, maxFeatures = 2600) => {
     viewportAbort?.abort();
     viewportAbort = new AbortController();
     const signal = viewportAbort.signal;
     try {
       const [amenities, buildings] = await Promise.all([
         getAmenities(bbox, signal),
-        getBuildings(bbox, 2600, signal),
+        getBuildings(bbox, maxFeatures, signal),
       ]);
       if (signal.aborted) return false;
       set({
