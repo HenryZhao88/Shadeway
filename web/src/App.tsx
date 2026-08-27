@@ -12,6 +12,7 @@ import RouteTimeseries from './ui/RouteTimeseries';
 import ThermalStrip from './ui/ThermalStrip';
 import TimeScrubber from './ui/TimeScrubber';
 import TurnList from './ui/TurnList';
+import UnitToggle from './ui/UnitToggle';
 import Weather from './ui/Weather';
 import { clock } from './sun/position';
 
@@ -43,7 +44,8 @@ export default function App() {
         </p>
         <p className="eyebrow">what the walk feels like</p>
         <div className="topbar-meta eyebrow">
-          <span>{DAY.format(scrubAt)}</span>
+          <UnitToggle />
+          <span className="topbar-date">{DAY.format(scrubAt)}</span>
           <span className="num">{clock(scrubAt)}</span>
           <span className={health ? 'scene-status' : 'scene-status offline'}>
             {health ? 'NYC scene' : 'offline'}

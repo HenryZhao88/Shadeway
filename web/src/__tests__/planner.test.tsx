@@ -50,10 +50,56 @@ describe('route planner', () => {
   test('opens without silently calculating a sample route', () => {
     render(<Endpoints />);
 
-    expect(screen.getByText('Where are you going?')).toBeInTheDocument();
+    expect(screen.getByText('Plan your route')).toBeInTheDocument();
+    expect(screen.getByLabelText('Starting point')).toBeInTheDocument();
+    expect(screen.getByLabelText('Destination')).toBeInTheDocument();
     expect(screen.getByText('Use my current location')).toBeInTheDocument();
-    expect(screen.getByText('Choose destination on the map')).toBeInTheDocument();
     expect(useStore.getState().route).toBeNull();
+  });
+
+  test('does not search on every keystroke', async () => {
+    const spy = vi.fn(mockFetch());
+    vi.stubGlobal('fetch', spy);
+    render(<Endpoints />);
+
+    await userEvent.type(screen.getByLabelText('Starting point'), 'Bryant Park');
+
+    expect(
+      spy.mock.calls.filter(([url]) => String(url).includes('/api/geocode')),
+    ).toHaveLength(0);
+  });
+
+  test('searches and selects both addresses before calculating the route', async () => {
+    render(<Endpoints />);
+
+    await userEvent.type(screen.getByLabelText('Starting point'), 'Times Square');
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Search for starting point' }),
+    );
+    await userEvent.click(await screen.findByText('Times Square'));
+
+    expect(useStore.getState().origin?.label).toMatch(/^Times Square/);
+    await userEvent.type(screen.getByLabelText('Destination'), 'Grand Central');
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Search for destination' }),
+    );
+    await userEvent.click(await screen.findByText('Grand Central Terminal'));
+
+    await vi.waitFor(() => {
+      expect(useStore.getState().routeStatus).toBe('ready');
+    });
+    expect(useStore.getState().destination?.label).toMatch(/^Grand Central/);
+  });
+
+  test('editing a selected address clears the stale endpoint', async () => {
+    useStore.setState({ origin: { lat: 40.758, lon: -73.9855, label: 'Times Square' } });
+    render(<Endpoints />);
+
+    const input = screen.getByLabelText('Starting point');
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Bryant Park');
+
+    expect(useStore.getState().origin).toBeNull();
   });
 
   test('turns a browser location fix into the route start', async () => {

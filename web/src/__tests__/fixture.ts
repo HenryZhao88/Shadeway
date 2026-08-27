@@ -237,6 +237,25 @@ function pick(url: string, overrides: Record<string, unknown>): unknown {
     if (url.includes(fragment)) return value;
   }
   if (url.includes('/health')) return HEALTH;
+  if (url.includes('/geocode')) {
+    return {
+      results: [
+        {
+          label: 'Times Square, Manhattan, New York, NY',
+          lat: 40.758,
+          lon: -73.9855,
+          kind: 'square',
+        },
+        {
+          label: 'Grand Central Terminal, Manhattan, New York, NY',
+          lat: 40.7527,
+          lon: -73.9772,
+          kind: 'station',
+        },
+      ],
+      attribution: '© OpenStreetMap contributors',
+    };
+  }
   if (url.includes('/departure-curve')) return DEPARTURE_CURVE;
   if (url.includes('/timeseries')) return TIMESERIES;
   if (url.includes('/route')) return ROUTE_RESPONSE;

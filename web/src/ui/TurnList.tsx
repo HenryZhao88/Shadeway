@@ -9,6 +9,8 @@
 import { useStore, chosenRouteId } from '../state/store';
 import { clock } from '../sun/position';
 import type { Instruction } from '../api/types';
+import { deltaDegrees } from '../heat';
+import { convertMetresInText, type UnitSystem } from '../units';
 
 const KIND_TAG: Record<string, string> = {
   start: 'go',
@@ -22,6 +24,7 @@ const KIND_TAG: Record<string, string> = {
 export default function TurnList() {
   const route = useStore((s) => s.route);
   const chosenId = useStore(chosenRouteId);
+  const unitSystem = useStore((s) => s.unitSystem);
   const chosen = route && chosenId ? route.routes[chosenId] : undefined;
 
   if (!chosen) return null;
@@ -40,7 +43,11 @@ export default function TurnList() {
 
       <div className="turns">
         {chosen.instructions.map((instruction, index) => (
-          <Card key={`${instruction.type}-${index}`} instruction={instruction} />
+          <Card
+            key={`${instruction.type}-${index}`}
+            instruction={instruction}
+            unitSystem={unitSystem}
+          />
         ))}
       </div>
 
@@ -54,7 +61,13 @@ export default function TurnList() {
   );
 }
 
-function Card({ instruction }: { instruction: Instruction }) {
+function Card({
+  instruction,
+  unitSystem,
+}: {
+  instruction: Instruction;
+  unitSystem: UnitSystem;
+}) {
   const why = instruction.why;
   const evidence: string[] = [];
 
@@ -64,8 +77,8 @@ function Card({ instruction }: { instruction: Instruction }) {
   if (why?.shaded_by) {
     evidence.push(
       why.dappled
-        ? `${why.shaded_by} — dappled light, not full shade`
-        : `shaded by ${why.shaded_by}`,
+        ? `${convertMetresInText(why.shaded_by, unitSystem)} — dappled light, not full shade`
+        : `shaded by ${convertMetresInText(why.shaded_by, unitSystem)}`,
     );
   }
 
@@ -79,8 +92,8 @@ function Card({ instruction }: { instruction: Instruction }) {
             {why?.delta_c != null ? (
               <span className="num">
                 {why.delta_c > 0
-                  ? `${Math.abs(why.delta_c).toFixed(1)}° cooler`
-                  : `${Math.abs(why.delta_c).toFixed(1)}° warmer`}
+                  ? `${deltaDegrees(why.delta_c, unitSystem, 1)}° cooler`
+                  : `${deltaDegrees(why.delta_c, unitSystem, 1)}° warmer`}
               </span>
             ) : null}
             {evidence.map((line) => (

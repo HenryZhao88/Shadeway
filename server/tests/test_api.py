@@ -42,6 +42,27 @@ def test_health_reports_the_real_scene(client):
     assert payload["planting_enabled"] is True
 
 
+def test_place_search_is_exposed_through_the_real_api(client, monkeypatch):
+    from shadeway import api
+
+    monkeypatch.setattr(
+        api.GEOCODER,
+        "search",
+        lambda query: [
+            {
+                "label": f"{query}, Manhattan, New York, NY",
+                "lat": 40.7536,
+                "lon": -73.984,
+                "kind": "park",
+            }
+        ],
+    )
+    response = client.get("/api/geocode", params={"q": "Bryant Park"})
+    assert response.status_code == 200
+    assert response.json()["results"][0]["label"].startswith("Bryant Park")
+    assert "OpenStreetMap" in response.json()["attribution"]
+
+
 def test_planting_can_be_disabled_for_public_deployments(client, monkeypatch):
     monkeypatch.setenv("SHADEWAY_ENABLE_PLANTING", "0")
     response = client.post(

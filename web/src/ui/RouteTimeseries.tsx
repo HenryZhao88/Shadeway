@@ -20,9 +20,10 @@
 
 import { useMemo, useState } from 'react';
 
-import { degrees, heatCss } from '../heat';
+import { degrees, deltaDegrees, heatCss } from '../heat';
 import { chosenRouteId, useStore } from '../state/store';
 import { clock } from '../sun/position';
+import { temperatureName, type UnitSystem } from '../units';
 import type { TimeseriesPoint } from '../api/types';
 
 const WIDTH = 340;
@@ -36,6 +37,7 @@ export default function RouteTimeseries() {
   const chosenId = useStore(chosenRouteId);
   const departAt = useStore((s) => s.departAt);
   const setScrubAt = useStore((s) => s.setScrubAt);
+  const unitSystem = useStore((s) => s.unitSystem);
   const [hover, setHover] = useState<number | null>(null);
   const [showTable, setShowTable] = useState(false);
 
@@ -113,8 +115,8 @@ export default function RouteTimeseries() {
           role="img"
           aria-label={`Felt temperature along this route by time of day. Setting off at ${clock(
             first.at_iso,
-          )} it averages ${degrees(first.mean_feels_like_c)} degrees; the worst block
-            peaks at ${degrees(worst.max_feels_like_c)} degrees around ${clock(
+          )} it averages ${degrees(first.mean_feels_like_c, unitSystem)} degrees ${temperatureName(unitSystem)}; the worst block
+            peaks at ${degrees(worst.max_feels_like_c, unitSystem)} degrees around ${clock(
               worst.at_iso,
             )}.`}
           onMouseLeave={() => setHover(null)}
@@ -142,7 +144,7 @@ export default function RouteTimeseries() {
                 fontSize="9"
                 fontFamily="var(--data)"
               >
-                {tick.value}
+                {degrees(tick.value, unitSystem)}
               </text>
             </g>
           ))}
@@ -227,15 +229,15 @@ export default function RouteTimeseries() {
             }}
           >
             <span className="num">{clock(active.at_iso)}</span> ·{' '}
-            <span className="num">{degrees(active.mean_feels_like_c)}°</span> avg ·{' '}
-            <span className="num">{degrees(active.max_feels_like_c)}°</span> worst ·{' '}
+            <span className="num">{degrees(active.mean_feels_like_c, unitSystem)}°</span> avg ·{' '}
+            <span className="num">{degrees(active.max_feels_like_c, unitSystem)}°</span> worst ·{' '}
             <span className="num">{Math.round(active.sun_fraction * 100)}%</span> sun
           </div>
         ) : null}
       </div>
 
       <p className="chart-note">
-        <Verdict points={points} />
+        <Verdict points={points} unitSystem={unitSystem} />
       </p>
 
       <button
@@ -263,8 +265,8 @@ export default function RouteTimeseries() {
             {points.map((point) => (
               <tr key={point.at_iso}>
                 <td>{clock(point.at_iso)}</td>
-                <td>{degrees(point.mean_feels_like_c)}°</td>
-                <td>{degrees(point.max_feels_like_c)}°</td>
+                <td>{degrees(point.mean_feels_like_c, unitSystem)}°</td>
+                <td>{degrees(point.max_feels_like_c, unitSystem)}°</td>
                 <td>{Math.round(point.sun_fraction * 100)}%</td>
               </tr>
             ))}
@@ -289,7 +291,13 @@ export default function RouteTimeseries() {
   );
 }
 
-function Verdict({ points }: { points: TimeseriesPoint[] }) {
+function Verdict({
+  points,
+  unitSystem,
+}: {
+  points: TimeseriesPoint[];
+  unitSystem: UnitSystem;
+}) {
   const first = points[0]!;
   const last = points[points.length - 1]!;
   const swing = last.mean_feels_like_c - first.mean_feels_like_c;
@@ -306,19 +314,19 @@ function Verdict({ points }: { points: TimeseriesPoint[] }) {
   if (peak.at_iso !== first.at_iso && peak.at_iso !== last.at_iso) {
     return (
       <>
-        It peaks at <b>{degrees(peak.mean_feels_like_c)}°</b> around{' '}
+        It peaks at <b>{degrees(peak.mean_feels_like_c, unitSystem)}°</b> around{' '}
         <b>{clock(peak.at_iso)}</b>, then eases off.
       </>
     );
   }
   return swing < 0 ? (
     <>
-      Setting off later helps: <b>{Math.round(Math.abs(swing))}°</b> cooler by{' '}
+      Setting off later helps: <b>{deltaDegrees(swing, unitSystem)}°</b> cooler by{' '}
       <b>{clock(last.at_iso)}</b>.
     </>
   ) : (
     <>
-      It gets worse from here — <b>{Math.round(swing)}°</b> hotter by{' '}
+      It gets worse from here — <b>{deltaDegrees(swing, unitSystem)}°</b> hotter by{' '}
       <b>{clock(last.at_iso)}</b>.
     </>
   );

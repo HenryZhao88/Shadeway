@@ -17,6 +17,7 @@ import { HEAT_CATEGORIES, degrees, heatCategory, heatCss } from '../heat';
 import { chosenRouteId, useStore } from '../state/store';
 import type { Route } from '../api/types';
 import { minutes } from '../sun/position';
+import { formatDistance, temperatureName, temperatureUnit, type UnitSystem } from '../units';
 
 export default function ThermalStrip() {
   const route = useStore((s) => s.route);
@@ -24,6 +25,7 @@ export default function ThermalStrip() {
   const chosenId = useStore(chosenRouteId);
   const hoverLeg = useStore((s) => s.hoverLeg);
   const selectRoute = useStore((s) => s.selectRoute);
+  const unitSystem = useStore((s) => s.unitSystem);
 
   if (!route) return null;
   const ordered = orderRoutes(route.routes, chosenId);
@@ -42,6 +44,7 @@ export default function ThermalStrip() {
           route={entry}
           isChosen={entry.route_id === chosenId}
           generation={generation}
+          unitSystem={unitSystem}
           onHoverLeg={(index) =>
             hoverLeg(entry.route_id === chosenId ? index : null)
           }
@@ -59,7 +62,9 @@ export default function ThermalStrip() {
             />
             {category.label}
             {Number.isFinite(category.from) ? (
-              <span className="num"> {category.from}°+</span>
+              <span className="num">
+                {' '}{degrees(category.from, unitSystem)}{temperatureUnit(unitSystem)}+
+              </span>
             ) : null}
           </li>
         ))}
@@ -76,11 +81,19 @@ interface StripProps {
   route: Route;
   isChosen: boolean;
   generation: number;
+  unitSystem: UnitSystem;
   onHoverLeg: (index: number | null) => void;
   onSelect: () => void;
 }
 
-function Strip({ route, isChosen, generation, onHoverLeg, onSelect }: StripProps) {
+function Strip({
+  route,
+  isChosen,
+  generation,
+  unitSystem,
+  onHoverLeg,
+  onSelect,
+}: StripProps) {
   const [hover, setHover] = useState<{ index: number; left: number } | null>(null);
   const total = route.legs.reduce((sum, leg) => sum + leg.length_m, 0) || 1;
 
@@ -102,8 +115,8 @@ function Strip({ route, isChosen, generation, onHoverLeg, onSelect }: StripProps
           {isChosen ? `${route.label} · recommended` : route.label}
         </span>
         <span className="strip-stats">
-          {degrees(route.feels_like_c.mean_c)}° avg ·{' '}
-          {degrees(route.feels_like_c.max_c)}° max · {minutes(route.duration_s)} min
+          {degrees(route.feels_like_c.mean_c, unitSystem)}° avg ·{' '}
+          {degrees(route.feels_like_c.max_c, unitSystem)}° max · {minutes(route.duration_s)} min
         </span>
       </div>
 
@@ -118,7 +131,8 @@ function Strip({ route, isChosen, generation, onHoverLeg, onSelect }: StripProps
         role="img"
         aria-label={`${route.label}: felt temperature along the route, averaging ${degrees(
           route.feels_like_c.mean_c,
-        )} degrees, peaking at ${degrees(route.feels_like_c.max_c)}`}
+          unitSystem,
+        )} degrees ${temperatureName(unitSystem)}, peaking at ${degrees(route.feels_like_c.max_c, unitSystem)}`}
       >
         {route.legs.map((leg, index) => (
           <div
@@ -151,7 +165,7 @@ function Strip({ route, isChosen, generation, onHoverLeg, onSelect }: StripProps
       <div className="strip-axis eyebrow">
         <span>start</span>
         <span>
-          {(total / 1000).toFixed(2)} km · ticks are crossings
+          {formatDistance(total, unitSystem)} · ticks are crossings
         </span>
         <span>finish</span>
       </div>
@@ -159,7 +173,7 @@ function Strip({ route, isChosen, generation, onHoverLeg, onSelect }: StripProps
       {hovered ? (
         <div className="tooltip" style={{ left: hover?.left ?? 0, bottom: 44 }}>
           <b>{hovered.street_name.replace(/\s+/g, ' ').trim()}</b> ·{' '}
-          <span className="num">{degrees(hovered.feels_like_c)}°</span> ·{' '}
+          <span className="num">{degrees(hovered.feels_like_c, unitSystem)}°</span> ·{' '}
           {heatCategory(hovered.feels_like_c)}
         </div>
       ) : null}

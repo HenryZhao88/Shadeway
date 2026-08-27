@@ -126,6 +126,29 @@ def weather(lat: float, lon: float, at_iso: datetime) -> WeatherSnapshot:
     return example_route_response().weather.model_copy(update={"observed_iso": at_iso})
 
 
+@app.get("/api/geocode")
+def geocode(q: str = Query(min_length=2, max_length=120)) -> dict[str, object]:
+    places = [
+        {"label": "Times Square, Manhattan, New York, NY", "lat": 40.758,
+         "lon": -73.9855, "kind": "square"},
+        {"label": "Grand Central Terminal, Manhattan, New York, NY",
+         "lat": 40.7527, "lon": -73.9772, "kind": "station"},
+        {"label": "Bryant Park, Manhattan, New York, NY", "lat": 40.7536,
+         "lon": -73.984, "kind": "park"},
+        {"label": "Herald Square, Manhattan, New York, NY", "lat": 40.7497,
+         "lon": -73.9881, "kind": "square"},
+    ]
+    words = q.casefold().split()
+    matches = [
+        place for place in places
+        if all(word in str(place["label"]).casefold() for word in words)
+    ]
+    return {
+        "results": matches[:5],
+        "attribution": "© OpenStreetMap contributors",
+    }
+
+
 @app.get("/api/amenities")
 def amenities(bbox: str) -> list[dict[str, object]]:
     from shadeway_contracts.fixtures import build_fixture_city

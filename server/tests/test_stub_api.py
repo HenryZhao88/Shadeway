@@ -20,6 +20,14 @@ def test_health(client):
     assert body["status"] == "ok"
 
 
+def test_place_search_returns_attributed_results(client):
+    response = client.get("/api/geocode", params={"q": "Bryant Park"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"][0]["label"].startswith("Bryant Park")
+    assert "OpenStreetMap" in body["attribution"]
+
+
 def test_route_returns_a_valid_route_response(client):
     body = client.post(
         "/api/route",

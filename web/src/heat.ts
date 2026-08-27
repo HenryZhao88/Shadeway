@@ -14,6 +14,12 @@
  * its own number.
  */
 
+import {
+  temperatureDeltaValue,
+  temperatureValue,
+  type UnitSystem,
+} from './units';
+
 export interface HeatStop {
   readonly c: number;
   readonly hex: string;
@@ -93,13 +99,27 @@ export function heatCategory(celsius: number): string {
 
 /** Rounded to a whole degree, because a tenth of a degree of felt temperature
  *  is well inside the model's own uncertainty and printing it would overclaim. */
-export function degrees(celsius: number | null | undefined): string {
+export function degrees(
+  celsius: number | null | undefined,
+  system: UnitSystem = 'metric',
+): string {
   if (celsius == null || !Number.isFinite(celsius)) return '—';
-  return String(Math.round(celsius));
+  return String(Math.round(temperatureValue(celsius, system)));
 }
 
-export function signedDegrees(delta: number): string {
-  const rounded = Math.round(Math.abs(delta));
+export function deltaDegrees(
+  deltaCelsius: number,
+  system: UnitSystem = 'metric',
+  decimals = 0,
+): string {
+  return Math.abs(temperatureDeltaValue(deltaCelsius, system)).toFixed(decimals);
+}
+
+export function signedDegrees(
+  delta: number,
+  system: UnitSystem = 'metric',
+): string {
+  const rounded = Math.round(Math.abs(temperatureDeltaValue(delta, system)));
   if (rounded === 0) return 'the same';
   return `${delta < 0 ? '−' : '+'}${rounded}°`;
 }

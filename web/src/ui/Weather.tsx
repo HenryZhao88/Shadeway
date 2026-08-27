@@ -8,10 +8,13 @@
 
 import { useStore } from '../state/store';
 import { clock } from '../sun/position';
+import { degrees } from '../heat';
+import { formatSpeed, temperatureUnit } from '../units';
 
 export default function Weather() {
   const route = useStore((s) => s.route);
   const health = useStore((s) => s.health);
+  const unitSystem = useStore((s) => s.unitSystem);
   if (!route) return null;
   const weather = route.weather;
   const isFallback = !weather.source.startsWith('open-meteo');
@@ -24,9 +27,15 @@ export default function Weather() {
       </div>
 
       <dl className="map-readout" style={{ position: 'static', display: 'grid', gap: 3 }}>
-        <Row label="air" value={`${weather.air_temp_c.toFixed(1)} °C`} />
+        <Row
+          label="air"
+          value={`${degrees(weather.air_temp_c, unitSystem)} ${temperatureUnit(unitSystem)}`}
+        />
         <Row label="humidity" value={`${Math.round(weather.relative_humidity_pct)} %`} />
-        <Row label="wind at 10 m" value={`${weather.wind_speed_10m_ms.toFixed(1)} m/s`} />
+        <Row
+          label={unitSystem === 'imperial' ? 'wind at 33 ft' : 'wind at 10 m'}
+          value={formatSpeed(weather.wind_speed_10m_ms, unitSystem)}
+        />
         <Row label="cloud" value={`${Math.round(weather.cloud_cover_pct)} %`} />
         <Row label="direct beam" value={`${Math.round(weather.direct_normal_wm2)} W/m²`} />
         <Row label="diffuse" value={`${Math.round(weather.diffuse_wm2)} W/m²`} />

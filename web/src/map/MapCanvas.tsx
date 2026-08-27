@@ -16,6 +16,7 @@ import { AMENITY_LABEL, type Amenity, type Bbox } from '../api/client';
 import { degrees, heatCategory } from '../heat';
 import { chosenRouteId, useStore } from '../state/store';
 import { clock, sunPosition } from '../sun/position';
+import type { UnitSystem } from '../units';
 import { BASEMAP_URL, FALLBACK_STYLE, INITIAL_VIEW } from './basemapStyle';
 import {
   amenityLayer,
@@ -73,6 +74,7 @@ export default function MapCanvas() {
   const scrubAt = useStore((s) => s.scrubAt);
   const route = useStore((s) => s.route);
   const routeGeneration = useStore((s) => s.routeGeneration);
+  const unitSystem = useStore((s) => s.unitSystem);
   const buildings = useStore((s) => s.buildings);
   const amenities = useStore((s) => s.amenities);
   const showAmenities = useStore((s) => s.showAmenities);
@@ -236,7 +238,7 @@ export default function MapCanvas() {
 
   const onHover = useCallback(
     (info: PickingInfo) => {
-      const lines = describe(info);
+      const lines = describe(info, unitSystem);
       if (!lines) {
         setTooltip(null);
         if (hoveredLegIndex !== null) hoverLeg(null);
@@ -246,7 +248,7 @@ export default function MapCanvas() {
       const legIndex = (info.object as { legIndex?: number } | null)?.legIndex;
       hoverLeg(typeof legIndex === 'number' ? legIndex : null);
     },
-    [hoverLeg, hoveredLegIndex],
+    [hoverLeg, hoveredLegIndex, unitSystem],
   );
 
   const onClick = useCallback(
@@ -348,13 +350,13 @@ export default function MapCanvas() {
   );
 }
 
-function describe(info: PickingInfo): string[] | null {
+function describe(info: PickingInfo, unitSystem: UnitSystem): string[] | null {
   if (!info.object || !info.layer) return null;
   const id = info.layer.id;
   if (id.startsWith('route-')) {
     const leg = info.object as { feels: number; streetName: string };
     return [
-      `${leg.streetName} · ${degrees(leg.feels)}°`,
+      `${leg.streetName} · ${degrees(leg.feels, unitSystem)}°`,
       heatCategory(leg.feels),
     ];
   }

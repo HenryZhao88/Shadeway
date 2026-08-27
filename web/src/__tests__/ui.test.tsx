@@ -13,6 +13,7 @@ import RouteCompare from '../ui/RouteCompare';
 import RouteTimeseries from '../ui/RouteTimeseries';
 import ThermalStrip from '../ui/ThermalStrip';
 import TurnList from '../ui/TurnList';
+import UnitToggle from '../ui/UnitToggle';
 import Weather from '../ui/Weather';
 import {
   DEFAULT_DESTINATION,
@@ -44,6 +45,7 @@ function loadRoute(overrides: Partial<typeof INITIAL> = {}) {
     departure: DEPARTURE_CURVE,
     departureStatus: 'ready',
     health: HEALTH,
+    unitSystem: 'metric',
     ...overrides,
   });
 }
@@ -100,6 +102,27 @@ describe('Hero', () => {
     expect(
       screen.getByText(/already the cool way/i),
     ).toBeInTheDocument();
+  });
+});
+
+describe('display units', () => {
+  test('starts in imperial and changes the whole presentation to metric', async () => {
+    useStore.setState({ ...INITIAL, unitSystem: 'imperial' });
+    render(<UnitToggle />);
+    expect(
+      screen.getByRole('button', { name: 'Use imperial units' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(screen.getByRole('button', { name: 'Use metric units' }));
+    expect(useStore.getState().unitSystem).toBe('metric');
+  });
+
+  test('converts absolute temperatures and cooling differences separately', () => {
+    loadRoute({ unitSystem: 'imperial' });
+    render(<Hero />);
+    expect(
+      screen.getByLabelText(/Feels like 91 degrees Fahrenheit/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText('14°')).toBeInTheDocument();
   });
 });
 
@@ -250,7 +273,7 @@ describe('HeatProfile', () => {
   test('shows the one number the profile actually is', () => {
     loadRoute();
     render(<HeatProfile />);
-    expect(screen.getByText('1 min per degree')).toBeInTheDocument();
+    expect(screen.getByText('1 min per °C')).toBeInTheDocument();
   });
 
   test('switching profile changes the number, and says who it is for', async () => {
@@ -258,7 +281,7 @@ describe('HeatProfile', () => {
     render(<HeatProfile />);
     await userEvent.click(screen.getByText('high risk'));
     expect(useStore.getState().profileKey).toBe('high_risk');
-    expect(screen.getByText('6 min per degree')).toBeInTheDocument();
+    expect(screen.getByText('6 min per °C')).toBeInTheDocument();
     expect(screen.getByText(/Over 65, pregnant/)).toBeInTheDocument();
   });
 

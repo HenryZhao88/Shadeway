@@ -49,6 +49,18 @@ export interface BuildingFootprint {
   polygon: [number, number][];
 }
 
+export interface GeocodeResult {
+  label: string;
+  lat: number;
+  lon: number;
+  kind: string;
+}
+
+export interface GeocodeResponse {
+  results: GeocodeResult[];
+  attribution: string;
+}
+
 export interface Health {
   status: string;
   scene: string;
@@ -103,6 +115,13 @@ async function detail(response: Response): Promise<string> {
 
 export function getHealth(signal?: AbortSignal) {
   return json<Health>('/health', { signal });
+}
+
+/** Place search is submit-only rather than typeahead: the public Nominatim
+ * service explicitly disallows autocomplete traffic. */
+export function searchPlaces(query: string, signal?: AbortSignal) {
+  const params = new URLSearchParams({ q: query.trim() });
+  return json<GeocodeResponse>(`/geocode?${params}`, { signal });
 }
 
 export interface RouteArgs {

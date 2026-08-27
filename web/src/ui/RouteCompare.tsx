@@ -4,15 +4,17 @@
  * picking between them is a display change and costs nothing.
  */
 
-import { degrees, heatCss, signedDegrees } from '../heat';
+import { degrees, deltaDegrees, heatCss, signedDegrees } from '../heat';
 import { chosenRouteId, useStore } from '../state/store';
 import { clock, minutes } from '../sun/position';
 import type { Route } from '../api/types';
+import { temperatureUnit, type UnitSystem } from '../units';
 
 export default function RouteCompare() {
   const route = useStore((s) => s.route);
   const chosenId = useStore(chosenRouteId);
   const selectRoute = useStore((s) => s.selectRoute);
+  const unitSystem = useStore((s) => s.unitSystem);
 
   if (!route) return null;
   const options = Object.values(route.routes).sort(
@@ -37,13 +39,14 @@ export default function RouteCompare() {
             option={option}
             fastest={fastest}
             selected={option.route_id === chosen.route_id}
+            unitSystem={unitSystem}
             onSelect={() => selectRoute(option.route_id)}
           />
         ))}
       </div>
 
-      <Verdict chosen={chosen} fastest={fastest} />
-      <Exposure route={chosen} />
+      <Verdict chosen={chosen} fastest={fastest} unitSystem={unitSystem} />
+      <Exposure route={chosen} unitSystem={unitSystem} />
 
       {options.length === 1 ? (
         <p className="hint" style={{ marginTop: 10 }}>
@@ -59,11 +62,13 @@ function Option({
   option,
   fastest,
   selected,
+  unitSystem,
   onSelect,
 }: {
   option: Route;
   fastest: Route;
   selected: boolean;
+  unitSystem: UnitSystem;
   onSelect: () => void;
 }) {
   const deltaC = option.feels_like_c.mean_c - fastest.feels_like_c.mean_c;
@@ -92,14 +97,14 @@ function Option({
           {minutes(option.duration_s)} min · arrive {clock(option.arrive_iso)}
           {isFastest || !differs
             ? ''
-            : ` · ${deltaMin >= 0 ? '+' : '−'}${Math.abs(Math.round(deltaMin))} min, ${signedDegrees(deltaC)}`}
+            : ` · ${deltaMin >= 0 ? '+' : '−'}${Math.abs(Math.round(deltaMin))} min, ${signedDegrees(deltaC, unitSystem)}`}
         </span>
       </span>
       <span
         className="option-temp"
         style={{ color: heatCss(option.feels_like_c.mean_c) }}
       >
-        {degrees(option.feels_like_c.mean_c)}°
+        {degrees(option.feels_like_c.mean_c, unitSystem)}°
       </span>
     </button>
   );
@@ -111,7 +116,7 @@ function Option({
  *  canopy share is the one that earns its place: "shaded, but by honey locusts"
  *  is the claim no other shade router can make, and the interface only ever
  *  made it one turn at a time. */
-function Exposure({ route }: { route: Route }) {
+function Exposure({ route, unitSystem }: { route: Route; unitSystem: UnitSystem }) {
   const { sun_fraction, mean_svf, canopy_fraction } = route.exposure;
   return (
     <dl className="exposure">
@@ -134,7 +139,7 @@ function Exposure({ route }: { route: Route }) {
       />
       <Stat
         label="p90 block"
-        value={`${degrees(route.feels_like_c.p90_c)}°`}
+        value={`${degrees(route.feels_like_c.p90_c, unitSystem)}${temperatureUnit(unitSystem)}`}
         hint="the 90th-percentile block, not the single worst one"
       />
     </dl>
@@ -150,7 +155,15 @@ function Stat({ label, value, hint }: { label: string; value: string; hint: stri
   );
 }
 
-function Verdict({ chosen, fastest }: { chosen: Route; fastest: Route }) {
+function Verdict({
+  chosen,
+  fastest,
+  unitSystem,
+}: {
+  chosen: Route;
+  fastest: Route;
+  unitSystem: UnitSystem;
+}) {
   if (chosen.route_id === fastest.route_id) {
     return (
       <p className="verdict">
@@ -172,13 +185,13 @@ function Verdict({ chosen, fastest }: { chosen: Route; fastest: Route }) {
     <p className="verdict">
       {extra <= 0 ? (
         <>
-          {chosen.label} is <b>{Math.round(cooler)}°</b> cooler for no extra
+          {chosen.label} is <b>{deltaDegrees(cooler, unitSystem)}°</b> cooler for no extra
           walking.
         </>
       ) : (
         <>
           <b>{extra}</b> extra {extra === 1 ? 'minute' : 'minutes'} buys you{' '}
-          <b>{Math.round(cooler)}°</b>.
+          <b>{deltaDegrees(cooler, unitSystem)}°</b>.
         </>
       )}
     </p>

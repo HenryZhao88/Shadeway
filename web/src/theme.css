@@ -204,6 +204,36 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
   gap: 18px;
 }
+.unit-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--ground);
+}
+.unit-toggle button {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  color: var(--ink-3);
+  font: 9px var(--data);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.unit-toggle button:hover {
+  color: var(--ink);
+}
+.unit-toggle button[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--panel-3);
+  box-shadow: 0 0 0 1px var(--rule-bright);
+}
+.unit-toggle small {
+  color: var(--ink-3);
+  font-size: 8px;
+}
 .scene-status {
   display: inline-flex;
   align-items: center;
@@ -752,7 +782,9 @@ input[type="range"]::-moz-range-thumb {
   z-index: 5;
   top: 16px;
   left: 16px;
-  width: min(370px, calc(100% - 32px));
+  width: min(420px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
   padding: 16px;
   border: 1px solid rgba(86, 103, 119, 0.82);
   border-radius: 12px;
@@ -791,7 +823,7 @@ input[type="range"]::-moz-range-thumb {
   gap: 10px;
   width: 100%;
   padding: 10px 11px;
-  margin-bottom: 9px;
+  margin-top: 10px;
   text-align: left;
   border: 1px solid rgba(66, 133, 244, 0.48);
   border-radius: 7px;
@@ -847,23 +879,160 @@ input[type="range"]::-moz-range-thumb {
   content: "";
   position: absolute;
   z-index: 1;
-  top: 18px;
-  bottom: 18px;
-  left: 13px;
+  top: 31px;
+  bottom: 31px;
+  left: 18px;
   width: 1px;
   background: var(--rule-bright);
 }
-.planner-fields .field {
+.address-form {
   position: relative;
   z-index: 2;
+}
+.address-form + .address-form {
+  margin-top: 7px;
+}
+.address-form > label {
+  display: block;
+  margin: 0 0 4px 2px;
+  color: var(--ink-2);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.address-field {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 5px 5px 5px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: rgba(30, 38, 47, 0.98);
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.address-field:focus-within,
+.address-field.is-picking {
+  border-color: var(--sun);
+  box-shadow: 0 0 0 2px rgba(255, 190, 92, 0.1);
+}
+.address-field input {
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  outline: 0;
+  color: var(--ink);
+  background: transparent;
+  font: 13px var(--body);
+}
+.address-field input::placeholder {
+  color: var(--ink-3);
+}
+.address-field input::-webkit-search-cancel-button {
+  filter: invert(1);
+  opacity: 0.5;
+}
+.field-map-button,
+.field-search-button {
+  padding: 6px 7px;
+  border-radius: 5px;
+  color: var(--ink-2);
+  background: var(--panel-3);
+  font-size: 10px;
+}
+.field-map-button:hover,
+.field-map-button[aria-pressed="true"] {
+  color: var(--sun);
+}
+.field-search-button {
+  min-width: 48px;
+  color: var(--ground);
+  background: var(--sun);
+  font-weight: 700;
+}
+.field-search-button:disabled {
+  cursor: default;
+  color: var(--ink-3);
+  background: var(--panel-3);
+}
+.field-search-button .spinner {
+  width: 11px;
+  height: 11px;
+}
+.field-hint {
+  display: block;
+  min-height: 13px;
+  margin: 3px 0 0 31px;
+  color: var(--ink-3);
+  font-size: 9.5px;
+}
+.search-results {
+  max-height: 228px;
+  margin-top: 8px;
+  overflow-y: auto;
+  border: 1px solid var(--rule-bright);
+  border-radius: 8px;
+  background: rgba(18, 24, 31, 0.99);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+.search-results ul {
+  list-style: none;
+}
+.search-results li + li {
+  border-top: 1px solid var(--rule);
+}
+.search-results li button {
+  display: grid;
+  grid-template-columns: 11px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
   width: 100%;
-  min-height: 39px;
-  background: rgba(30, 38, 47, 0.96);
+  padding: 9px 11px;
+  color: var(--ink);
   text-align: left;
 }
-.planner-fields .field:hover,
-.planner-fields .field[aria-pressed="true"] {
-  border-color: var(--sun);
+.search-results li button:hover,
+.search-results li button:focus-visible {
+  background: var(--panel-3);
+}
+.search-results li button > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+.search-results li b,
+.search-results li small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-results li b {
+  font-size: 12px;
+}
+.search-results li small {
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: 9.5px;
+}
+.result-pin {
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--sun);
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+}
+.search-state {
+  padding: 10px 11px;
+  color: var(--ink-2);
+  font-size: 11px;
+}
+.search-attribution {
+  padding: 5px 10px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-3);
+  font-size: 8.5px;
+  text-align: right;
 }
 .planner-action-row {
   display: flex;
@@ -1123,7 +1292,7 @@ input[type="range"]::-moz-range-thumb {
   .topbar {
     padding: 0 12px;
   }
-  .topbar-meta span:first-child,
+  .topbar-date,
   .topbar > .eyebrow {
     display: none;
   }
@@ -1146,6 +1315,7 @@ input[type="range"]::-moz-range-thumb {
     width: calc(100% - 18px);
     padding: 13px;
     border-radius: 10px;
+    max-height: calc(100% - 18px);
   }
   .planner-head {
     margin-bottom: 9px;
@@ -1155,12 +1325,26 @@ input[type="range"]::-moz-range-thumb {
   }
   .location-button {
     padding: 8px 10px;
-    margin-bottom: 7px;
+    margin-top: 7px;
   }
-  .planner-fields .field {
-    min-height: 36px;
-    padding-top: 7px;
-    padding-bottom: 7px;
+  .address-field {
+    min-height: 38px;
+  }
+  .field-hint {
+    display: none;
+  }
+  .address-form + .address-form {
+    margin-top: 7px;
+  }
+  .planner-fields::before {
+    top: 29px;
+    bottom: 19px;
+  }
+  .unit-toggle button {
+    padding: 3px 5px;
+  }
+  .unit-toggle button span {
+    display: none;
   }
   .sample-trips {
     display: none;

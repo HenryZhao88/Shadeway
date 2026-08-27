@@ -8,6 +8,7 @@
 
 import { PROFILES, useStore, type ProfileKey } from '../state/store';
 import { PRESET_PROFILE_NAMES } from '../api/types';
+import { formatMinutesPerDegree, formatSpeed } from '../units';
 
 const PACES: { label: string; ms: number; note: string }[] = [
   { label: 'strolling', ms: 1.1, note: 'unhurried' },
@@ -20,6 +21,7 @@ export default function HeatProfile() {
   const setProfile = useStore((s) => s.setProfile);
   const walkSpeedMs = useStore((s) => s.walkSpeedMs);
   const setWalkSpeed = useStore((s) => s.setWalkSpeed);
+  const unitSystem = useStore((s) => s.unitSystem);
 
   const profile = PROFILES[profileKey]!;
   const pace = PACES.find((p) => Math.abs(p.ms - walkSpeedMs) < 0.01);
@@ -29,7 +31,7 @@ export default function HeatProfile() {
       <div className="block-head">
         <p className="eyebrow">who is walking</p>
         <span className="hint num">
-          {profile.minutes_per_degree} min per degree
+          {formatMinutesPerDegree(profile.minutes_per_degree, unitSystem)}
         </span>
       </div>
 
@@ -52,7 +54,7 @@ export default function HeatProfile() {
 
       <div className="block-head" style={{ marginTop: 16 }}>
         <p className="eyebrow">pace</p>
-        <span className="hint num">{walkSpeedMs.toFixed(2)} m/s</span>
+        <span className="hint num">{formatSpeed(walkSpeedMs, unitSystem, 2)}</span>
       </div>
       <div className="chip-row" role="group" aria-label="Walking pace">
         {PACES.map((option) => (

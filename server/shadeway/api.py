@@ -24,6 +24,7 @@ from shadeway import instructions as instr
 from shadeway import waypoints as waypoints_mod
 from shadeway.cost import EdgeCostModel
 from shadeway.evidence import EvidenceProvider
+from shadeway.geocoder import ATTRIBUTION, Geocoder, GeocoderUnavailable
 from shadeway.horizon import FINGERPRINT_FILES, HorizonCache, source_fingerprint
 from shadeway.router import timedep
 from shadeway.router.graph import Graph
@@ -176,6 +177,7 @@ app.add_middleware(
 _ROUTE_CACHE: "OrderedDict[tuple[str, str], tuple[Route, list[int], RouteRequest]]" = OrderedDict()
 _ROUTE_CACHE_MAX = 64
 _ROUTE_CACHE_LOCK = threading.RLock()
+GEOCODER = Geocoder()
 
 
 def _remember(
@@ -592,6 +594,18 @@ def _departure_curve_locked(
 @app.get("/api/weather", response_model=WeatherSnapshot)
 def weather(lat: float, lon: float, at_iso: datetime) -> WeatherSnapshot:
     return _state().weather.at(lat, lon, at_iso)
+
+
+@app.get("/api/geocode")
+def geocode(
+    q: str = Query(min_length=2, max_length=120),
+) -> dict[str, object]:
+    """Search NYC after an explicit submit; never as typeahead."""
+    try:
+        results = GEOCODER.search(q)
+    except GeocoderUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {"results": results, "attribution": ATTRIBUTION}
 
 
 @app.get("/api/amenities")

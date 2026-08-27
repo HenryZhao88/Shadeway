@@ -8,9 +8,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { degrees, heatCategory, heatCss } from '../heat';
+import { degrees, deltaDegrees, heatCategory, heatCss } from '../heat';
 import { chosenRouteId, useStore } from '../state/store';
 import { minutes } from '../sun/position';
+import { temperatureName, temperatureUnit } from '../units';
 
 const COUNT_MS = 620;
 
@@ -19,6 +20,7 @@ export default function Hero() {
   const status = useStore((s) => s.routeStatus);
   const generation = useStore((s) => s.routeGeneration);
   const chosenId = useStore(chosenRouteId);
+  const unitSystem = useStore((s) => s.unitSystem);
 
   const chosen = route && chosenId ? route.routes[chosenId] : undefined;
   const fastest = route?.routes['fastest'];
@@ -57,10 +59,10 @@ export default function Hero() {
       <p
         className="hero-degrees"
         style={{ color: heatCss(shown ?? target) }}
-        aria-label={`Feels like ${degrees(target)} degrees Celsius, ${heatCategory(target)}`}
+        aria-label={`Feels like ${degrees(target, unitSystem)} degrees ${temperatureName(unitSystem)}, ${heatCategory(target)}`}
       >
-        {degrees(shown ?? target)}
-        <span className="hero-unit">°C</span>
+        {degrees(shown ?? target, unitSystem)}
+        <span className="hero-unit">{temperatureUnit(unitSystem)}</span>
       </p>
       <p className="hero-caption">
         {heatCategory(target)} over {minutes(chosen.duration_s)} minutes.{' '}
@@ -71,7 +73,7 @@ export default function Hero() {
                 ? 'No extra walking'
                 : `${Math.round(extraMinutes)} extra minutes`}
             </b>{' '}
-            buys you <b>{Math.round(delta)}°</b>.
+            buys you <b>{deltaDegrees(delta, unitSystem)}°</b>.
           </>
         ) : (
           <>The fast way is already the cool way on this one.</>

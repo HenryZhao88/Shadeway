@@ -39,6 +39,7 @@ import type {
   RouteResponse,
   TimeseriesResponse,
 } from '../api/types';
+import type { UnitSystem } from '../units';
 
 /** Mirrors PRESET_PROFILES in the contract. The number is the whole model: how
  *  many extra walking minutes one degree of cooling is worth. */
@@ -105,6 +106,7 @@ interface State {
   departAt: Date;
   profileKey: ProfileKey;
   walkSpeedMs: number;
+  unitSystem: UnitSystem;
 
   route: RouteResponse | null;
   routeStatus: Status;
@@ -134,6 +136,7 @@ interface State {
   setScrubAt: (when: Date) => void;
   commitDeparture: () => void;
   setPlace: (which: 'origin' | 'destination', place: Place) => void;
+  clearPlace: (which: 'origin' | 'destination') => void;
   setTrip: (origin: Place, destination: Place) => void;
   selectCurrentLocation: () => void;
   updateCurrentLocation: (place: CurrentLocation) => void;
@@ -142,6 +145,7 @@ interface State {
   swapEnds: () => void;
   setProfile: (key: ProfileKey) => void;
   setWalkSpeed: (ms: number) => void;
+  setUnitSystem: (system: UnitSystem) => void;
   setPickMode: (mode: PickMode) => void;
   selectRoute: (routeId: string | null) => void;
   hoverLeg: (index: number | null) => void;
@@ -198,6 +202,7 @@ export const useStore = create<State>((set, get) => ({
   departAt: initialDeparture(),
   profileKey: 'standard',
   walkSpeedMs: 1.35,
+  unitSystem: 'imperial',
 
   route: null,
   routeStatus: 'idle',
@@ -251,6 +256,20 @@ export const useStore = create<State>((set, get) => ({
     set({ scrubAt: get().departAt });
     if (get().origin && get().destination) void get().fetchRoute();
   },
+
+  clearPlace: (which) =>
+    set({
+      [which]: null,
+      ...(which === 'origin' ? { originMode: 'custom' as const } : {}),
+      route: null,
+      routeStatus: 'idle',
+      routeError: null,
+      timeseries: {},
+      timeseriesStatus: 'idle',
+      departure: null,
+      departureStatus: 'idle',
+      overrideRouteId: null,
+    } as Partial<State>),
 
   setTrip: (origin, destination) => {
     set({
@@ -345,6 +364,8 @@ export const useStore = create<State>((set, get) => ({
     set({ walkSpeedMs: ms });
     if (get().origin && get().destination) void get().fetchRoute();
   },
+
+  setUnitSystem: (system) => set({ unitSystem: system }),
 
   setPickMode: (mode) => set({ pickMode: mode }),
   selectRoute: (routeId) => set({ overrideRouteId: routeId }),

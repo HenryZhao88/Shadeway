@@ -19,9 +19,10 @@
 
 import { useMemo, useState } from 'react';
 
-import { degrees, heatCss } from '../heat';
+import { degrees, deltaDegrees, heatCss } from '../heat';
 import { DEFAULT_ORIGIN, useStore } from '../state/store';
 import { clock, daylightWindow } from '../sun/position';
+import { temperatureName, temperatureUnit } from '../units';
 import type { DeparturePoint } from '../api/types';
 
 const WIDTH = 340;
@@ -33,6 +34,7 @@ export default function DepartureCurve() {
   const status = useStore((s) => s.departureStatus);
   const setScrubAt = useStore((s) => s.setScrubAt);
   const origin = useStore((s) => s.origin) ?? DEFAULT_ORIGIN;
+  const unitSystem = useStore((s) => s.unitSystem);
   const [hover, setHover] = useState<number | null>(null);
   const [showTable, setShowTable] = useState(false);
 
@@ -91,7 +93,7 @@ export default function DepartureCurve() {
     <section className="block">
       <div className="block-head">
         <p className="eyebrow">when to leave</p>
-        <span className="hint">felt °C by departure</span>
+        <span className="hint">felt {temperatureUnit(unitSystem)} by departure</span>
       </div>
 
       <div className="chart">
@@ -100,8 +102,10 @@ export default function DepartureCurve() {
           role="img"
           aria-label={`Felt temperature by departure time. Leaving now feels like ${degrees(
             now.best_mean_feels_like_c,
-          )} degrees; the coolest departure is ${clock(best.depart_iso)} at ${degrees(
+            unitSystem,
+          )} degrees ${temperatureName(unitSystem)}; the coolest departure is ${clock(best.depart_iso)} at ${degrees(
             best.best_mean_feels_like_c,
+            unitSystem,
           )} degrees.`}
           onMouseLeave={() => setHover(null)}
           onMouseMove={(event) => {
@@ -128,7 +132,7 @@ export default function DepartureCurve() {
                 fontSize="9"
                 fontFamily="var(--data)"
               >
-                {tick.value}
+                {degrees(tick.value, unitSystem)}
               </text>
             </g>
           ))}
@@ -236,7 +240,7 @@ export default function DepartureCurve() {
             }}
           >
             <span className="num">{clock(active.depart_iso)}</span> ·{' '}
-            <span className="num">{degrees(active.best_mean_feels_like_c)}°</span> ·{' '}
+            <span className="num">{degrees(active.best_mean_feels_like_c, unitSystem)}°</span> ·{' '}
             <span className="num">
               {Math.round(active.best_duration_s / 60)} min
             </span>
@@ -248,7 +252,7 @@ export default function DepartureCurve() {
         {saving >= 0.5 && wait > 0 ? (
           <>
             Leave <b>{wait} minutes later</b> and it feels{' '}
-            <b>{Math.round(saving)}°</b> cooler.
+            <b>{deltaDegrees(saving, unitSystem)}°</b> cooler.
           </>
         ) : (
           <>Now is as good as it gets while the sun is up.</>
@@ -296,7 +300,7 @@ export default function DepartureCurve() {
             {points.map((point) => (
               <tr key={point.depart_iso}>
                 <td>{clock(point.depart_iso)}</td>
-                <td>{degrees(point.best_mean_feels_like_c)}°</td>
+                <td>{degrees(point.best_mean_feels_like_c, unitSystem)}°</td>
                 <td>{Math.round(point.best_duration_s / 60)}</td>
               </tr>
             ))}
