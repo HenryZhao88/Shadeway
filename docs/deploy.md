@@ -60,8 +60,8 @@ request-time headroom.
 
 | host | free tier | verdict |
 |---|---|---|
-| **Oracle Cloud Always Free** | 4 ARM cores, 24 GB RAM, always on | Best fit. Runs either scope with room to spare, never sleeps. Wants a card at signup. |
-| **Hugging Face Spaces** (Docker, CPU basic) | 2 vCPU, 16 GB RAM | Easiest. No card. Sleeps when idle and wakes on request — fine for a demo, and the startup cost is seconds, not the warm. |
+| **Oracle Cloud Always Free** | 2 ARM OCPUs, 12 GB RAM total | Best no-cost fit for the Manhattan scope. It does not scale to zero, but OCI can reclaim an idle Always Free VM; see the Oracle notes below. |
+| **Hugging Face Spaces** (Docker, CPU basic) | 2 vCPU, 16 GB RAM | Requires a paid Hugging Face plan to create a new Docker/compute Space. CPU Basic has no hourly cost, but sleeps after 48 hours of inactivity. |
 | Google Cloud Run | 360k GiB-s/month | Works, but it scales to zero and every cold start reloads the cache. Set `--memory 1Gi --min-instances 1` and you are outside the free allowance. |
 | Render free web service | 512 MB RAM | Needs a fresh-image RSS measurement; the old image OOMed. |
 | Fly.io | no standing free allowance since 2024 | Not reliably free. |
@@ -110,11 +110,23 @@ before adding a second.
 
 ## Oracle Cloud, concretely
 
-You must create the account yourself — signup requires a credit card for
-identity verification (Always Free resources are not charged against it).
+Create and manage the instance in the [Oracle Cloud Console](https://cloud.oracle.com/).
+Signup requires a credit card for identity verification (Always Free resources
+are not charged against it).
 
-**Shape:** `VM.Standard.A1.Flex`, 4 OCPU / 24 GB, Ubuntu 22.04 (aarch64). Not
-`VM.Standard.E2.1.Micro`; its 1 GB leaves much less request-time and OS headroom.
+**Shape:** one `VM.Standard.A1.Flex`, **1 OCPU / 6 GB RAM**, Ubuntu 22.04
+(aarch64). The supplied systemd unit limits the container to 2 GB, leaving
+enough operating-system and request-time headroom. Do not use
+`VM.Standard.E2.1.Micro`; its 1 GB leaves too little headroom.
+
+**Cost and availability:** this allocation is $0/month while it remains within
+OCI Always Free's 2 OCPU / 12 GB monthly allowance. It is a VM, not a
+scale-to-zero service, and the `Restart=always` unit keeps the container
+running across process exits and reboots. OCI may nevertheless reclaim an
+Always Free VM after seven idle days when its CPU, network, and (for A1)
+memory usage all remain below the documented thresholds; see Oracle's
+[Always Free resource policy](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
+Treat a paid VM as the option for an unconditional uptime guarantee.
 
 Be warned that A1 is the most contended thing on the free tier. "Out of host
 capacity" at instance creation is common and can persist for days in busy
@@ -139,9 +151,13 @@ look broken:
 
 ## Hugging Face Spaces
 
-The pragmatic answer when Oracle has no free ARM capacity — which is often.
-16 GB of RAM, no credit card, no capacity queue, and it builds the Dockerfile
-for you.
+An easy Docker deployment after an account is set up, but not a no-payment path
+for a new account: Hugging Face now requires a paid plan to create Docker or
+other compute Spaces. CPU Basic provides 2 vCPU and 16 GB RAM with no hourly
+charge, but a free-hardware Space sleeps after 48 hours of inactivity and that
+sleep interval cannot be configured. Paid hardware runs indefinitely by
+default. See Hugging Face's [Spaces overview](https://huggingface.co/docs/hub/spaces-overview)
+and [sleep-time policy](https://huggingface.co/docs/hub/spaces-gpus#sleep-time).
 
     ./deploy/push-to-hf.sh <user>/<space-name>
 
@@ -170,5 +186,7 @@ raw NYC downloads and the test suites stay out.
 `sdk: docker` and `app_port: 8000`, which must match the `PORT` the Dockerfile
 defaults to — change one and you change the other.
 
-Free Spaces sleep after a period of inactivity and wake on the next request.
-Waking costs seconds, not the warm: the cache is baked into the image.
+On CPU Basic, Spaces sleep after 48 hours of inactivity and wake on the next
+request. Waking costs seconds, not the warm: the cache is baked into the image.
+The public app URL is `https://<owner>-<space>.hf.space/` after the build is
+running.
