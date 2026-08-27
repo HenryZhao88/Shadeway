@@ -58,8 +58,21 @@ RUN pip install --no-deps ./contracts ./server
 # horizon.npz. Serving without the cache works — it fills lazily and
 # /api/health reports warm_fraction — but the first route through each block
 # pays for its own ray casting, so bake a warmed one in for anything public.
+#
+# Build services such as Render clone only Git-tracked files. The real city is
+# generated output and deliberately stays out of Git, so provide a small
+# fixture city when that output is absent. This makes the default image a
+# working public demo; local/release builds still include any CITY_DIR present
+# in the build context (for example, `make docker` ships data/nyc).
 ARG CITY_DIR=data/nyc
-COPY ${CITY_DIR} ./data/nyc
+COPY . /source
+RUN mkdir -p ./data \
+ && if [ -d "/source/${CITY_DIR}" ]; then \
+      cp -a "/source/${CITY_DIR}" ./data/nyc; \
+    else \
+      python -m shadeway_contracts.fixtures --out ./data/nyc; \
+    fi \
+ && rm -rf /source
 COPY --from=web /build/web/dist ./web/dist
 
 # Free hosts inject the port. Default to 8000 for `docker run` on a laptop.
