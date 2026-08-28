@@ -9,6 +9,9 @@ import { formatAccuracy } from '../units';
 type EndpointKind = 'origin' | 'destination';
 type SearchStatus = 'idle' | 'loading' | 'ready' | 'error';
 
+const ROUTE_LOADER_PATH =
+  'M29.760000000000005 18.72 c0 7.28 -3.9200000000000004 13.600000000000001 -9.840000000000002 16.96 c -2.8800000000000003 1.6800000000000002 -6.24 2.64 -9.840000000000002 2.64 c -3.6 0 -6.88 -0.96 -9.76 -2.64 c0 -7.28 3.9200000000000004 -13.52 9.840000000000002 -16.96 c2.8800000000000003 -1.6800000000000002 6.24 -2.64 9.76 -2.64 S26.880000000000003 17.040000000000003 29.760000000000005 18.72 c5.84 3.3600000000000003 9.76 9.68 9.840000000000002 16.96 c -2.8800000000000003 1.6800000000000002 -6.24 2.64 -9.76 2.64 c -3.6 0 -6.88 -0.96 -9.840000000000002 -2.64 c -5.84 -3.3600000000000003 -9.76 -9.68 -9.76 -16.96 c0 -7.28 3.9200000000000004 -13.600000000000001 9.76 -16.96 C25.84 5.120000000000001 29.760000000000005 11.440000000000001 29.760000000000005 18.72z';
+
 const PRESETS: {
   label: string;
   from: typeof DEFAULT_ORIGIN;
@@ -203,6 +206,7 @@ export default function Endpoints() {
     routeStatus,
     pickMode,
   });
+  const calculating = routeStatus === 'loading';
 
   return (
     <section className="route-planner" aria-label="Plan a walking route">
@@ -288,11 +292,19 @@ export default function Endpoints() {
         </p>
         <button
           type="button"
-          className="route-button"
-          disabled={!origin || !destination || routeStatus === 'loading'}
+          className={`route-button${calculating ? ' is-loading' : ''}`}
+          disabled={!origin || !destination || calculating}
+          aria-busy={calculating}
           onClick={() => void fetchRoute()}
         >
-          {routeStatus === 'loading' ? 'Calculating…' : 'Directions'}
+          {calculating ? (
+            <>
+              <RouteCalculationSpinner />
+              <span>Calculating…</span>
+            </>
+          ) : (
+            'Directions'
+          )}
         </button>
       </div>
 
@@ -332,6 +344,34 @@ export default function Endpoints() {
         <small className="sample-note">The shade demo uses the next 3 PM sun.</small>
       </details>
     </section>
+  );
+}
+
+function RouteCalculationSpinner() {
+  return (
+    <svg
+      className="route-loader"
+      viewBox="0 0 40 40"
+      height="40"
+      width="40"
+      preserveAspectRatio="xMidYMid meet"
+      aria-hidden="true"
+    >
+      <path
+        className="route-loader-track"
+        fill="none"
+        strokeWidth="4"
+        pathLength="100"
+        d={ROUTE_LOADER_PATH}
+      />
+      <path
+        className="route-loader-car"
+        fill="none"
+        strokeWidth="4"
+        pathLength="100"
+        d={ROUTE_LOADER_PATH}
+      />
+    </svg>
   );
 }
 

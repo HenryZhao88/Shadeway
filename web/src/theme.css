@@ -1090,6 +1090,10 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1.3;
 }
 .route-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   min-width: 92px;
   padding: 8px 12px;
   border-radius: 6px;
@@ -1105,6 +1109,41 @@ input[type="range"]::-moz-range-thumb {
   cursor: default;
   color: var(--ink-3);
   background: var(--panel-3);
+}
+.route-button.is-loading {
+  min-width: 132px;
+  color: var(--ground);
+  background: var(--sun);
+  cursor: wait;
+}
+.route-loader {
+  --uib-size: 21px;
+  --uib-color: currentColor;
+  --uib-speed: 1.4s;
+  --uib-bg-opacity: 0.16;
+  width: var(--uib-size);
+  height: var(--uib-size);
+  flex: none;
+  overflow: visible;
+  transform-origin: center;
+}
+.route-loader-car {
+  fill: none;
+  stroke: var(--uib-color);
+  stroke-dasharray: 15, 85;
+  stroke-dashoffset: 0;
+  stroke-linecap: round;
+  animation: route-loader-travel var(--uib-speed) linear infinite;
+  will-change: stroke-dasharray, stroke-dashoffset;
+}
+.route-loader-track {
+  stroke: var(--uib-color);
+  opacity: var(--uib-bg-opacity);
+}
+@keyframes route-loader-travel {
+  to {
+    stroke-dashoffset: -100;
+  }
 }
 .planner-error {
   margin-top: 9px;

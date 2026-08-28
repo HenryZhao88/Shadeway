@@ -57,6 +57,15 @@ describe('route planner', () => {
     expect(useStore.getState().route).toBeNull();
   });
 
+  test('makes route calculation visible with motion and status text', () => {
+    useStore.setState({ routeStatus: 'loading' });
+    const { container } = render(<Endpoints />);
+
+    const button = screen.getByRole('button', { name: 'Calculating…' });
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    expect(container.querySelector('.route-loader')).toBeInTheDocument();
+  });
+
   test('the featured sample loads a visible afternoon shade detour', async () => {
     render(<Endpoints />);
 
