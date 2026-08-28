@@ -40,6 +40,7 @@ def test_health_reports_the_real_scene(client):
     assert payload["status"] == "ok"
     assert payload["scene"] != "stub"
     assert payload["planting_enabled"] is True
+    assert payload["router_revision"] == "batched-corridor-v1"
 
 
 def test_place_search_is_exposed_through_the_real_api(client, monkeypatch):

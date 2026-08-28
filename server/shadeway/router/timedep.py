@@ -18,6 +18,7 @@ from shadeway.router import bicriteria
 
 LAST_ITERATIONS = 0
 MAX_PREFETCH_KEYS = 100_000
+ROUTER_REVISION = "batched-corridor-v1"
 
 
 def _prefetch_corridor(

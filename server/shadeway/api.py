@@ -223,6 +223,7 @@ def health() -> dict[str, object]:
         "n_samples": int(state.graph.n_samples),
         "scene_version": state.scene.version,
         "planting_enabled": _planting_enabled(),
+        "router_revision": timedep.ROUTER_REVISION,
     }
 
 
