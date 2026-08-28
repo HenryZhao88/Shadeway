@@ -415,7 +415,7 @@ def test_packed_building_overview_keeps_every_city_building_at_low_detail(client
 
     state = _state()
     response = client.get(
-        "/api/buildings-overview.bin", headers={"accept-encoding": "identity"}
+        "/api/buildings-overview-v2.bin", headers={"accept-encoding": "identity"}
     )
     magic, building_count, coordinate_count = struct.unpack_from(
         "<4sII", response.content
@@ -424,10 +424,36 @@ def test_packed_building_overview_keeps_every_city_building_at_low_detail(client
     assert response.status_code == 200
     assert magic == PACKED_BUILDING_MAGIC
     assert building_count == len(state.scene.building_geoms)
-    assert coordinate_count == building_count * 5
-    assert len(response.content) == 16 + building_count * 56
+    assert coordinate_count >= building_count * 4
+    assert len(response.content) == 16 + building_count * 16 + coordinate_count * 8
     assert response.headers["x-shadeway-truncated"] == "0"
     assert response.headers["cache-control"].startswith("public, max-age=86400")
+
+
+def test_packed_building_overview_preserves_real_non_rectangular_outlines(
+    monkeypatch,
+):
+    import struct
+    from types import SimpleNamespace
+
+    import numpy as np
+    from shapely.geometry import Polygon
+
+    from shadeway import api
+
+    scene = SimpleNamespace(
+        building_geoms=[
+            Polygon([(0, 0), (20, 4), (14, 10), (20, 20), (0, 20), (5, 10)])
+        ],
+        building_heights_m=np.array([30], dtype=np.float32),
+        building_bases_m=np.array([0], dtype=np.float32),
+    )
+    monkeypatch.setattr(api, "_PACKED_BUILDING_OVERVIEW", None)
+    payload = api._packed_building_overview(SimpleNamespace(scene=scene))
+    _, building_count, coordinate_count = struct.unpack_from("<4sII", payload)
+
+    assert building_count == 1
+    assert coordinate_count > 5, "overview regressed to a five-point bounds box"
 
 
 def test_packed_buildings_signal_oversized_views_without_serializing_them(

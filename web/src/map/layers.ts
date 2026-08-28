@@ -128,7 +128,7 @@ export function buildingLayer(buildings: BuildingFootprint[]) {
   });
 }
 
-/** Lightweight bounding-box prisms for continuous city context. MapCanvas
+/** Lightweight simplified-footprint prisms for continuous city context. MapCanvas
  * keeps this level visible until the exact street-detail layer is ready, then
  * swaps both layers in one render so there is never an empty city. */
 export function buildingOverviewLayer(buildings: BuildingFootprint[]) {

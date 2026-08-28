@@ -308,7 +308,7 @@ describe('viewport data', () => {
     expect(useStore.getState().buildingOverviewStatus).toBe('ready');
     expect(
       spy.mock.calls.filter(([url]) =>
-        String(url).includes('/buildings-overview.bin'),
+        String(url).includes('/buildings-overview-v2.bin'),
       ),
     ).toHaveLength(1);
   });

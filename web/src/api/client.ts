@@ -250,7 +250,7 @@ export async function getPackedBuildings(
 export function getBuildingOverview(): Promise<BuildingResponse> {
   if (!buildingOverviewPromise) {
     buildingOverviewPromise = fetchPackedBuildings(
-      '/buildings-overview.bin',
+      '/buildings-overview-v2.bin',
     ).catch((error) => {
       buildingOverviewPromise = undefined;
       throw error;

@@ -194,7 +194,7 @@ describe('packed building loading', () => {
     const second = await getBuildingOverview();
 
     expect(spy).toHaveBeenCalledTimes(1);
-    expect(String(spy.mock.calls[0]![0])).toContain('/buildings-overview.bin');
+    expect(String(spy.mock.calls[0]![0])).toContain('/buildings-overview-v2.bin');
     expect(first).toBe(second);
     expect(first.buildings).toEqual([PACKED_BUILDING]);
   });
