@@ -27,6 +27,18 @@ export function renderBudget(view: ViewState): MapRenderBudget {
   return { buildingLoad: { maxFeatures: 450, complete: true }, showShadows: true };
 }
 
+/** Choose exactly one building level. Street geometry replaces overview
+ * geometry only after it exists, preventing both an empty zoom band and
+ * overlapping roofs during the handoff. */
+export function buildingLevels<T>(
+  wantsDetail: boolean,
+  overview: T[],
+  detail: T[],
+): { overview: T[]; detail: T[] } {
+  if (wantsDetail && detail.length) return { overview: [], detail };
+  return { overview, detail: [] };
+}
+
 export function fitRoute(
   current: ViewState,
   origin: { lat: number; lon: number },

@@ -408,6 +408,28 @@ def test_packed_buildings_encode_one_complete_typed_array_viewport(client):
                   (coordinates[:, 1] <= 90_000_000))
 
 
+def test_packed_building_overview_keeps_every_city_building_at_low_detail(client):
+    import struct
+
+    from shadeway.api import PACKED_BUILDING_MAGIC, _state
+
+    state = _state()
+    response = client.get(
+        "/api/buildings-overview.bin", headers={"accept-encoding": "identity"}
+    )
+    magic, building_count, coordinate_count = struct.unpack_from(
+        "<4sII", response.content
+    )
+
+    assert response.status_code == 200
+    assert magic == PACKED_BUILDING_MAGIC
+    assert building_count == len(state.scene.building_geoms)
+    assert coordinate_count == building_count * 5
+    assert len(response.content) == 16 + building_count * 56
+    assert response.headers["x-shadeway-truncated"] == "0"
+    assert response.headers["cache-control"].startswith("public, max-age=86400")
+
+
 def test_packed_buildings_signal_oversized_views_without_serializing_them(
     client, monkeypatch
 ):

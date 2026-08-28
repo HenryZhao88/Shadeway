@@ -20,6 +20,7 @@ import type { UnitSystem } from '../units';
 import { BASEMAP_URL, FALLBACK_STYLE, INITIAL_VIEW } from './basemapStyle';
 import {
   bboxFor,
+  buildingLevels,
   fitRoute,
   renderBudget,
   type ViewState,
@@ -27,6 +28,7 @@ import {
 import {
   amenityLayer,
   buildingLayer,
+  buildingOverviewLayer,
   currentLocationLayers,
   endpointLayer,
   routeLayers,
@@ -63,6 +65,7 @@ export default function MapCanvas() {
   const routeGeneration = useStore((s) => s.routeGeneration);
   const unitSystem = useStore((s) => s.unitSystem);
   const buildings = useStore((s) => s.buildings);
+  const buildingOverview = useStore((s) => s.buildingOverview);
   const amenities = useStore((s) => s.amenities);
   const showAmenities = useStore((s) => s.showAmenities);
   const origin = useStore((s) => s.origin);
@@ -76,9 +79,18 @@ export default function MapCanvas() {
   const plant = useStore((s) => s.plant);
   const hoverLeg = useStore((s) => s.hoverLeg);
   const fetchViewportData = useStore((s) => s.fetchViewportData);
+  const fetchBuildingOverview = useStore((s) => s.fetchBuildingOverview);
 
   const bbox = useMemo<Bbox>(() => bboxFor(viewState), [viewState]);
   const budget = useMemo(() => renderBudget(viewState), [viewState]);
+  const buildingLevelsForView = useMemo(
+    () => buildingLevels(budget.showShadows, buildingOverview, buildings),
+    [budget.showShadows, buildingOverview, buildings],
+  );
+
+  useEffect(() => {
+    void fetchBuildingOverview();
+  }, [fetchBuildingOverview]);
 
   useEffect(() => {
     if (
@@ -193,7 +205,8 @@ export default function MapCanvas() {
     return [
       sunlitGroundLayer(bbox, sun.elevationDeg),
       ...(budget.showShadows ? [shadowLayer(shadows)] : []),
-      buildingLayer(buildings),
+      buildingOverviewLayer(buildingLevelsForView.overview),
+      buildingLayer(buildingLevelsForView.detail),
       ...(showAmenities ? [amenityLayer(amenities)] : []),
       ...routeLayers(routes, chosenId, hoveredLegIndex),
       ...(chosen?.waypoints.length ? [waypointLayer(chosen.waypoints)] : []),
@@ -217,6 +230,7 @@ export default function MapCanvas() {
     destination,
     hoveredLegIndex,
     origin,
+    buildingLevelsForView,
     route,
     shadows,
     showAmenities,
@@ -331,7 +345,10 @@ export default function MapCanvas() {
         </div>
         <div>
           <span>buildings</span>
-          <b>{buildings.length}</b>
+          <b>
+            {buildingLevelsForView.detail.length ||
+              buildingLevelsForView.overview.length}
+          </b>
         </div>
         <div>
           <span>pins</span>
@@ -344,8 +361,8 @@ export default function MapCanvas() {
         <b>{budget.showShadows ? 'street shade' : 'city overview'}</b>
         <span>
           {budget.showShadows
-            ? 'live 3D buildings and shadows'
-            : 'zoom in for 3D buildings'}
+            ? 'exact 3D buildings and live shadows'
+            : 'continuous 3D building overview'}
         </span>
         <span className={isRotating ? 'is-active' : undefined}>
           {isRotating ? 'rotating and tilting' : 'right-drag to rotate and tilt'}

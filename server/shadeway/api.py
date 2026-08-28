@@ -199,6 +199,8 @@ MAX_BUILDINGS_PER_RESPONSE = 2_000
 # accidental city-wide request.
 MAX_PACKED_BUILDINGS_PER_RESPONSE = 20_000
 PACKED_BUILDING_MAGIC = b"SWB1"
+_PACKED_BUILDING_OVERVIEW: tuple[int, bytes] | None = None
+_PACKED_BUILDING_OVERVIEW_LOCK = threading.Lock()
 
 
 def _remember(
@@ -749,6 +751,74 @@ def _packed_buildings(state: AppState, hits: np.ndarray) -> bytes:
             offsets.tobytes(),
             encoded_coordinates.tobytes(),
         )
+    )
+
+
+def _packed_building_overview(state: AppState) -> bytes:
+    """One low-detail rectangle per authoritative building.
+
+    At city scale a footprint is only a handful of pixels, so transmitting its
+    full ring is wasted work. Bounds preserve the real position, footprint
+    scale, base and height while keeping all Manhattan buildings cheap enough
+    to retain for the entire map session.
+    """
+    global _PACKED_BUILDING_OVERVIEW
+    scene_identity = id(state.scene)
+    cached = _PACKED_BUILDING_OVERVIEW
+    if cached is not None and cached[0] == scene_identity:
+        return cached[1]
+    with _PACKED_BUILDING_OVERVIEW_LOCK:
+        cached = _PACKED_BUILDING_OVERVIEW
+        if cached is not None and cached[0] == scene_identity:
+            return cached[1]
+
+        geometries = np.asarray(state.scene.building_geoms, dtype=object)
+        bounds = shapely.bounds(geometries)
+        valid = np.isfinite(bounds).all(axis=1)
+        ids = np.flatnonzero(valid).astype("<i4")
+        bounds = bounds[valid]
+        count = len(ids)
+        projected = np.empty((count, 5, 2), dtype=np.float64)
+        projected[:, 0] = bounds[:, [0, 1]]
+        projected[:, 1] = bounds[:, [2, 1]]
+        projected[:, 2] = bounds[:, [2, 3]]
+        projected[:, 3] = bounds[:, [0, 3]]
+        projected[:, 4] = bounds[:, [0, 1]]
+        lon, lat = _to_ll.transform(
+            projected[:, :, 0].ravel(), projected[:, :, 1].ravel()
+        )
+        coordinates = np.empty((count * 5, 2), dtype="<i4")
+        coordinates[:, 0] = np.rint(lon * 1_000_000).astype(np.int32)
+        coordinates[:, 1] = np.rint(lat * 1_000_000).astype(np.int32)
+        offsets = np.arange(0, (count + 1) * 5, 5, dtype="<u4")
+
+        payload = b"".join(
+            (
+                struct.pack("<4sII", PACKED_BUILDING_MAGIC, count, count * 5),
+                ids.tobytes(),
+                state.scene.building_heights_m[ids]
+                .astype("<f4", copy=False)
+                .tobytes(),
+                state.scene.building_bases_m[ids]
+                .astype("<f4", copy=False)
+                .tobytes(),
+                offsets.tobytes(),
+                coordinates.tobytes(),
+            )
+        )
+        _PACKED_BUILDING_OVERVIEW = (scene_identity, payload)
+        return payload
+
+
+@app.get("/api/buildings-overview.bin")
+def packed_building_overview() -> Response:
+    return Response(
+        content=_packed_building_overview(_state()),
+        media_type="application/vnd.shadeway.buildings",
+        headers={
+            "x-shadeway-truncated": "0",
+            "cache-control": "public, max-age=86400, stale-while-revalidate=3600",
+        },
     )
 
 

@@ -36,6 +36,7 @@ const ALWAYS_ON_TOP = { depthCompare: 'always' as const, depthWriteEnabled: fals
  *  polygons are doing that job with real geometry. */
 const BUILDING_FILL: Rgba = [48, 59, 72, 248];
 const BUILDING_LINE: Rgba = [86, 103, 119, 215];
+const BUILDING_OVERVIEW_FILL: Rgba = [43, 53, 65, 238];
 
 /** Shade needs something to be darker THAN.
  *
@@ -121,6 +122,25 @@ export function buildingLayer(buildings: BuildingFootprint[]) {
     getElevation: (d) => d.height_m,
     getFillColor: BUILDING_FILL,
     // Unlit on purpose: see the note on BUILDING_FILL.
+    material: false,
+    pickable: false,
+    updateTriggers: { getElevation: buildings.length },
+  });
+}
+
+/** Lightweight bounding-box prisms for continuous city context. MapCanvas
+ * keeps this level visible until the exact street-detail layer is ready, then
+ * swaps both layers in one render so there is never an empty city. */
+export function buildingOverviewLayer(buildings: BuildingFootprint[]) {
+  return new PolygonLayer<BuildingFootprint>({
+    id: 'building-overview',
+    data: buildings,
+    extruded: true,
+    filled: true,
+    stroked: false,
+    getPolygon: (d) => d.polygon,
+    getElevation: (d) => d.height_m,
+    getFillColor: BUILDING_OVERVIEW_FILL,
     material: false,
     pickable: false,
     updateTriggers: { getElevation: buildings.length },

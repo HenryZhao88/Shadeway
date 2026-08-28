@@ -219,7 +219,10 @@ export function mockFetch(overrides: Record<string, unknown> = {}) {
     _init?: RequestInit,
   ): Promise<Response> => {
     const url = String(typeof input === 'string' ? input : input.toString());
-    if (url.includes('/buildings.bin')) {
+    if (
+      url.includes('/buildings.bin') ||
+      url.includes('/buildings-overview.bin')
+    ) {
       // SWB1 header, zero buildings/coordinates, and the required zero offset.
       return new Response(
         new Uint8Array([

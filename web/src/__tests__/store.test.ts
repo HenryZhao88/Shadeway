@@ -299,6 +299,20 @@ describe('choosing a route', () => {
 });
 
 describe('viewport data', () => {
+  test('loads a persistent whole-city overview independently of detail zoom', async () => {
+    const spy = vi.fn(mockFetch());
+    vi.stubGlobal('fetch', spy);
+
+    await useStore.getState().fetchBuildingOverview();
+
+    expect(useStore.getState().buildingOverviewStatus).toBe('ready');
+    expect(
+      spy.mock.calls.filter(([url]) =>
+        String(url).includes('/buildings-overview.bin'),
+      ),
+    ).toHaveLength(1);
+  });
+
   test('skips custom building requests at city overview zoom', async () => {
     const spy = vi.fn(mockFetch());
     vi.stubGlobal('fetch', spy);

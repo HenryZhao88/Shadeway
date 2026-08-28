@@ -4,6 +4,7 @@ import { INITIAL_VIEW } from '../map/basemapStyle';
 import {
   BUILDING_DETAIL_ZOOM,
   bboxFor,
+  buildingLevels,
   fitRoute,
   renderBudget,
   type ViewState,
@@ -18,6 +19,27 @@ const OVERVIEW: ViewState = {
 };
 
 describe('map camera building policy', () => {
+  test('keeps overview buildings visible until exact detail is ready', () => {
+    const overview = ['overview'];
+    expect(buildingLevels(true, overview, [])).toEqual({
+      overview,
+      detail: [],
+    });
+  });
+
+  test('swaps overview and exact buildings without overlapping them', () => {
+    const overview = ['overview'];
+    const detail = ['detail'];
+    expect(buildingLevels(true, overview, detail)).toEqual({
+      overview: [],
+      detail,
+    });
+    expect(buildingLevels(false, overview, detail)).toEqual({
+      overview,
+      detail: [],
+    });
+  });
+
   test('opens close enough to load complete real buildings', () => {
     expect(INITIAL_VIEW.zoom).toBeGreaterThanOrEqual(BUILDING_DETAIL_ZOOM);
     expect(renderBudget({ ...INITIAL_VIEW }).buildingLoad).toEqual({

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import {
   clearBuildingTileCache,
+  getBuildingOverview,
   getCompleteBuildings,
   getPackedBuildings,
   getViewportBuildings,
@@ -183,6 +184,21 @@ describe('complete building loading', () => {
 });
 
 describe('packed building loading', () => {
+  test('loads and reuses the whole-city overview once', async () => {
+    const spy = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      packedResponse([PACKED_BUILDING]),
+    );
+    vi.stubGlobal('fetch', spy);
+
+    const first = await getBuildingOverview();
+    const second = await getBuildingOverview();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(String(spy.mock.calls[0]![0])).toContain('/buildings-overview.bin');
+    expect(first).toBe(second);
+    expect(first.buildings).toEqual([PACKED_BUILDING]);
+  });
+
   test('decodes typed arrays without losing geometry or height precision', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => packedResponse([PACKED_BUILDING])));
 

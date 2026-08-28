@@ -233,6 +233,7 @@ const packedViewportCache: Array<{
   bbox: Bbox;
   buildings: BuildingFootprint[];
 }> = [];
+let buildingOverviewPromise: Promise<BuildingResponse> | undefined;
 
 /** Load a complete navigation viewport in one compact response. Coordinates
  * are int32 microdegrees and all other fields are typed arrays, cutting the
@@ -241,11 +242,30 @@ export async function getPackedBuildings(
   bbox: Bbox,
   signal?: AbortSignal,
 ): Promise<BuildingResponse> {
+  return fetchPackedBuildings(`/buildings.bin?bbox=${bbox.join(',')}`, signal);
+}
+
+/** Load the whole-city low-detail prisms once. They stay resident so zooming
+ * out never turns Manhattan into an empty basemap while exact rings unload. */
+export function getBuildingOverview(): Promise<BuildingResponse> {
+  if (!buildingOverviewPromise) {
+    buildingOverviewPromise = fetchPackedBuildings(
+      '/buildings-overview.bin',
+    ).catch((error) => {
+      buildingOverviewPromise = undefined;
+      throw error;
+    });
+  }
+  return buildingOverviewPromise;
+}
+
+async function fetchPackedBuildings(
+  path: string,
+  signal?: AbortSignal,
+): Promise<BuildingResponse> {
   let response: Response;
   try {
-    response = await fetch(`${BASE}/buildings.bin?bbox=${bbox.join(',')}`, {
-      signal,
-    });
+    response = await fetch(`${BASE}${path}`, { signal });
   } catch (cause) {
     if ((cause as Error)?.name === 'AbortError') throw cause;
     throw new ApiError(
@@ -509,6 +529,7 @@ async function getBuildingTile(
 export function clearBuildingTileCache() {
   buildingTileCache.clear();
   packedViewportCache.length = 0;
+  buildingOverviewPromise = undefined;
 }
 
 function seedBuildingTiles([west, south, east, north]: Bbox): Bbox[] {

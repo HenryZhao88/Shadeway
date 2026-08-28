@@ -20,6 +20,7 @@ import { create } from 'zustand';
 import {
   ApiError,
   getAmenities,
+  getBuildingOverview,
   getBuildings,
   getDepartureCurve,
   getHealth,
@@ -131,6 +132,8 @@ interface State {
   showAmenities: boolean;
   buildings: BuildingFootprint[];
   buildingsTruncated: boolean;
+  buildingOverview: BuildingFootprint[];
+  buildingOverviewStatus: Status;
 
   health: Health | null;
   pickMode: PickMode;
@@ -165,6 +168,7 @@ interface State {
     bbox: Bbox,
     buildingLoad?: BuildingLoadOptions,
   ) => Promise<boolean>;
+  fetchBuildingOverview: () => Promise<void>;
   fetchHealth: () => Promise<void>;
   plant: (positions: LatLon[]) => Promise<void>;
 }
@@ -228,6 +232,8 @@ export const useStore = create<State>((set, get) => ({
   showAmenities: true,
   buildings: [],
   buildingsTruncated: false,
+  buildingOverview: [],
+  buildingOverviewStatus: 'idle',
 
   health: null,
   pickMode: 'none',
@@ -512,6 +518,23 @@ export const useStore = create<State>((set, get) => ({
       // starting, and that map never repaints until someone pans.
       if (aborted(error)) return false;
       return false;
+    }
+  },
+
+  fetchBuildingOverview: async () => {
+    const status = get().buildingOverviewStatus;
+    if (status === 'ready' || status === 'loading') return;
+    set({ buildingOverviewStatus: 'loading' });
+    try {
+      const response = await getBuildingOverview();
+      set({
+        buildingOverview: response.buildings,
+        buildingOverviewStatus: 'ready',
+      });
+    } catch {
+      // Overview is progressive map furniture. Exact street buildings and the
+      // route still work if an older server is briefly active during rollout.
+      set({ buildingOverviewStatus: 'error' });
     }
   },
 
