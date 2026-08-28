@@ -219,6 +219,24 @@ export function mockFetch(overrides: Record<string, unknown> = {}) {
     _init?: RequestInit,
   ): Promise<Response> => {
     const url = String(typeof input === 'string' ? input : input.toString());
+    if (url.includes('/buildings.bin')) {
+      // SWB1 header, zero buildings/coordinates, and the required zero offset.
+      return new Response(
+        new Uint8Array([
+          0x53, 0x57, 0x42, 0x31,
+          0, 0, 0, 0,
+          0, 0, 0, 0,
+          0, 0, 0, 0,
+        ]),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/vnd.shadeway.buildings',
+            'x-shadeway-truncated': '0',
+          },
+        },
+      );
+    }
     const body = pick(url, overrides);
     if (body === undefined) {
       return new Response(JSON.stringify({ detail: `no stub for ${url}` }), {

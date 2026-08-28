@@ -363,6 +363,77 @@ def test_buildings_endpoint_serves_the_occluders_the_router_uses(client):
         assert len(building["polygon"]) >= 3
 
 
+def test_packed_buildings_encode_one_complete_typed_array_viewport(client):
+    import struct
+
+    import numpy as np
+
+    from shadeway.api import PACKED_BUILDING_MAGIC, _state
+
+    state = _state()
+    lon, lat = state.graph.node_lonlat[0]
+    response = client.get(
+        "/api/buildings.bin",
+        params={"bbox": f"{lon - 0.05},{lat - 0.05},{lon + 0.05},{lat + 0.05}"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith(
+        "application/vnd.shadeway.buildings"
+    )
+    assert response.headers["x-shadeway-truncated"] == "0"
+    assert response.headers["cache-control"].startswith("public, max-age=300")
+    magic, building_count, coordinate_count = struct.unpack_from(
+        "<4sII", response.content
+    )
+    assert magic == PACKED_BUILDING_MAGIC
+    assert building_count > 0
+    assert coordinate_count >= building_count * 4
+
+    offsets_start = 12 + building_count * 12
+    offsets = np.frombuffer(
+        response.content, dtype="<u4", count=building_count + 1, offset=offsets_start
+    )
+    coordinate_start = offsets_start + (building_count + 1) * 4
+    coordinates = np.frombuffer(
+        response.content, dtype="<i4", count=coordinate_count * 2,
+        offset=coordinate_start,
+    ).reshape(-1, 2)
+    assert offsets[0] == 0
+    assert offsets[-1] == coordinate_count
+    assert len(response.content) == coordinate_start + coordinate_count * 8
+    assert np.all((-180_000_000 <= coordinates[:, 0]) &
+                  (coordinates[:, 0] <= 180_000_000))
+    assert np.all((-90_000_000 <= coordinates[:, 1]) &
+                  (coordinates[:, 1] <= 90_000_000))
+
+
+def test_packed_buildings_signal_oversized_views_without_serializing_them(
+    client, monkeypatch
+):
+    import struct
+
+    from shadeway import api
+    from shadeway.api import PACKED_BUILDING_MAGIC, _state
+
+    monkeypatch.setattr(api, "MAX_PACKED_BUILDINGS_PER_RESPONSE", 1)
+    state = _state()
+    lon, lat = state.graph.node_lonlat[0]
+    response = client.get(
+        "/api/buildings.bin",
+        params={"bbox": f"{lon - 0.05},{lat - 0.05},{lon + 0.05},{lat + 0.05}"},
+    )
+
+    assert response.headers["x-shadeway-truncated"] == "1"
+    assert struct.unpack_from("<4sII", response.content) == (
+        PACKED_BUILDING_MAGIC,
+        0,
+        0,
+    )
+    # Header plus the one required zero ring offset; no partial geometry.
+    assert len(response.content) == 16
+
+
 def test_large_api_responses_are_compressed(client):
     from shadeway.api import _state
 

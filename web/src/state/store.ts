@@ -21,10 +21,10 @@ import {
   ApiError,
   getAmenities,
   getBuildings,
-  getCompleteBuildings,
   getDepartureCurve,
   getHealth,
   getTimeseries,
+  getViewportBuildings,
   postPlant,
   postRoute,
   type Amenity,
@@ -490,7 +490,7 @@ export const useStore = create<State>((set, get) => ({
       const buildingRequest =
         buildingLoad.maxFeatures > 0
           ? buildingLoad.complete
-            ? getCompleteBuildings(bbox, buildingLoad.maxFeatures, signal)
+            ? getViewportBuildings(bbox, buildingLoad.maxFeatures, signal)
             : getBuildings(bbox, buildingLoad.maxFeatures, signal)
           : Promise.resolve({ buildings: [], truncated: false });
       const [amenities, buildings] = await Promise.all([

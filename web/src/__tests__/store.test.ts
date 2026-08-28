@@ -315,7 +315,7 @@ describe('viewport data', () => {
     expect(useStore.getState().buildings).toEqual([]);
   });
 
-  test('uses bounded tiled requests for a complete street viewport', async () => {
+  test('uses one packed request for a complete street viewport', async () => {
     const spy = vi.fn(mockFetch());
     vi.stubGlobal('fetch', spy);
 
@@ -328,10 +328,8 @@ describe('viewport data', () => {
     const buildingCalls = spy.mock.calls.filter(([url]) =>
       String(url).includes('/buildings'),
     );
-    expect(buildingCalls.length).toBeGreaterThan(1);
-    expect(
-      buildingCalls.every(([url]) => String(url).includes('max_features=450')),
-    ).toBe(true);
+    expect(buildingCalls).toHaveLength(1);
+    expect(String(buildingCalls[0]![0])).toContain('/buildings.bin?bbox=');
   });
 
   test('a failed amenity fetch does not disturb the route', async () => {

@@ -226,6 +226,172 @@ export function getBuildings(
   );
 }
 
+const PACKED_BUILDING_MAGIC = [0x53, 0x57, 0x42, 0x31] as const; // SWB1
+const PACKED_VIEWPORT_PADDING = 0.18;
+const PACKED_VIEWPORT_CACHE_MAX = 2;
+const packedViewportCache: Array<{
+  bbox: Bbox;
+  buildings: BuildingFootprint[];
+}> = [];
+
+/** Load a complete navigation viewport in one compact response. Coordinates
+ * are int32 microdegrees and all other fields are typed arrays, cutting the
+ * live opening waterfall from 28 JSON requests to one small binary request. */
+export async function getPackedBuildings(
+  bbox: Bbox,
+  signal?: AbortSignal,
+): Promise<BuildingResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}/buildings.bin?bbox=${bbox.join(',')}`, {
+      signal,
+    });
+  } catch (cause) {
+    if ((cause as Error)?.name === 'AbortError') throw cause;
+    throw new ApiError(
+      0,
+      'Cannot reach shadeway right now. Check your connection and try again.',
+    );
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, await detail(response));
+  }
+  const buildings = decodePackedBuildings(await response.arrayBuffer());
+  return {
+    buildings,
+    truncated: response.headers.get('x-shadeway-truncated') === '1',
+  };
+}
+
+/** Binary first; bounded JSON tiles remain the compatibility path for an old
+ * server or a viewport that exceeds the packed endpoint's safety ceiling. */
+export async function getViewportBuildings(
+  bbox: Bbox,
+  tileMaxFeatures = 450,
+  signal?: AbortSignal,
+): Promise<BuildingResponse> {
+  const cachedIndex = packedViewportCache.findIndex((entry) =>
+    bboxContains(entry.bbox, bbox),
+  );
+  if (cachedIndex >= 0) {
+    const cached = packedViewportCache[cachedIndex]!;
+    packedViewportCache.splice(cachedIndex, 1);
+    packedViewportCache.push(cached);
+    return {
+      buildings: cached.buildings.filter((building) =>
+        buildingIntersectsBbox(building, bbox),
+      ),
+      truncated: false,
+    };
+  }
+
+  const requestBbox = padBbox(bbox, PACKED_VIEWPORT_PADDING);
+  try {
+    const response = await getPackedBuildings(requestBbox, signal);
+    if (response.truncated) {
+      return getCompleteBuildings(bbox, tileMaxFeatures, signal);
+    }
+    packedViewportCache.push({ bbox: requestBbox, buildings: response.buildings });
+    while (packedViewportCache.length > PACKED_VIEWPORT_CACHE_MAX) {
+      packedViewportCache.shift();
+    }
+    return {
+      buildings: response.buildings.filter((building) =>
+        buildingIntersectsBbox(building, bbox),
+      ),
+      truncated: false,
+    };
+  } catch (error) {
+    // Allows the new frontend to roll out against a briefly older container.
+    // Other failures should retry the primary path instead of multiplying a
+    // struggling server's load by starting a 28-request fallback waterfall.
+    if (error instanceof ApiError && [404, 413].includes(error.status)) {
+      return getCompleteBuildings(bbox, tileMaxFeatures, signal);
+    }
+    throw error;
+  }
+}
+
+function decodePackedBuildings(buffer: ArrayBuffer): BuildingFootprint[] {
+  const headerBytes = 12;
+  if (buffer.byteLength < 16) throw invalidPackedBuildings();
+  const bytes = new Uint8Array(buffer);
+  if (PACKED_BUILDING_MAGIC.some((byte, index) => bytes[index] !== byte)) {
+    throw invalidPackedBuildings();
+  }
+  const view = new DataView(buffer);
+  const buildingCount = view.getUint32(4, true);
+  const coordinateCount = view.getUint32(8, true);
+  const idsStart = headerBytes;
+  const heightsStart = idsStart + buildingCount * 4;
+  const basesStart = heightsStart + buildingCount * 4;
+  const offsetsStart = basesStart + buildingCount * 4;
+  const coordinatesStart = offsetsStart + (buildingCount + 1) * 4;
+  const expectedBytes = coordinatesStart + coordinateCount * 8;
+  if (expectedBytes !== buffer.byteLength) throw invalidPackedBuildings();
+
+  const ids = new Int32Array(buffer, idsStart, buildingCount);
+  const heights = new Float32Array(buffer, heightsStart, buildingCount);
+  const bases = new Float32Array(buffer, basesStart, buildingCount);
+  const offsets = new Uint32Array(buffer, offsetsStart, buildingCount + 1);
+  const coordinates = new Int32Array(
+    buffer,
+    coordinatesStart,
+    coordinateCount * 2,
+  );
+  if (offsets[0] !== 0 || offsets[buildingCount] !== coordinateCount) {
+    throw invalidPackedBuildings();
+  }
+
+  const buildings: BuildingFootprint[] = new Array(buildingCount);
+  for (let index = 0; index < buildingCount; index += 1) {
+    const start = offsets[index]!;
+    const end = offsets[index + 1]!;
+    if (end < start || end > coordinateCount) throw invalidPackedBuildings();
+    const polygon: [number, number][] = new Array(end - start);
+    for (let coordinate = start; coordinate < end; coordinate += 1) {
+      polygon[coordinate - start] = [
+        coordinates[coordinate * 2]! / 1_000_000,
+        coordinates[coordinate * 2 + 1]! / 1_000_000,
+      ];
+    }
+    buildings[index] = {
+      building_id: ids[index]!,
+      height_m: heights[index]!,
+      base_m: bases[index]!,
+      polygon,
+    };
+  }
+  return buildings;
+}
+
+function invalidPackedBuildings() {
+  return new ApiError(502, 'The server returned invalid building geometry.');
+}
+
+function padBbox([west, south, east, north]: Bbox, ratio: number): Bbox {
+  const lonPadding = (east - west) * ratio;
+  const latPadding = (north - south) * ratio;
+  return [
+    west - lonPadding,
+    south - latPadding,
+    east + lonPadding,
+    north + latPadding,
+  ];
+}
+
+function bboxContains(
+  [outerWest, outerSouth, outerEast, outerNorth]: Bbox,
+  [innerWest, innerSouth, innerEast, innerNorth]: Bbox,
+) {
+  return (
+    outerWest <= innerWest &&
+    outerSouth <= innerSouth &&
+    outerEast >= innerEast &&
+    outerNorth >= innerNorth
+  );
+}
+
 const BUILDING_TILE_LON_DEG = 0.0075;
 const BUILDING_TILE_LAT_DEG = 0.005;
 const BUILDING_TILE_CONCURRENCY = 4;
@@ -342,6 +508,7 @@ async function getBuildingTile(
  * isolated. Ordinary pans deliberately keep this cache warm. */
 export function clearBuildingTileCache() {
   buildingTileCache.clear();
+  packedViewportCache.length = 0;
 }
 
 function seedBuildingTiles([west, south, east, north]: Bbox): Bbox[] {

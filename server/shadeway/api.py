@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import struct
 import threading
 import time
 import uuid
@@ -15,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import shapely
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pyproj import Transformer
 from starlette.middleware.gzip import GZipMiddleware
@@ -192,6 +193,12 @@ GEOCODER = Geocoder()
 # Keep this server-side as well as in the UI: a stale browser bundle must not be
 # able to turn a viewport request into an outage.
 MAX_BUILDINGS_PER_RESPONSE = 2_000
+# The packed endpoint carries only fixed-width arrays rather than thousands of
+# Python dictionaries and repeated JSON property names. It can safely return a
+# complete street viewport at a much higher count while still rejecting an
+# accidental city-wide request.
+MAX_PACKED_BUILDINGS_PER_RESPONSE = 20_000
+PACKED_BUILDING_MAGIC = b"SWB1"
 
 
 def _remember(
@@ -699,6 +706,76 @@ def buildings(
             }
         )
     return {"buildings": out, "truncated": bool(len(hits) > response_limit)}
+
+
+def _packed_buildings(state: AppState, hits: np.ndarray) -> bytes:
+    """Encode footprints as aligned little-endian typed arrays.
+
+    Layout: ``SWB1``, building count, coordinate-pair count, then int32 ids,
+    float32 heights, float32 bases, uint32 ring offsets, and interleaved int32
+    lon/lat microdegrees. The browser can decode this without JSON parsing or
+    per-coordinate strings, and microdegrees retain the existing endpoint's
+    roughly decimetre precision.
+    """
+    hits = np.asarray(hits, dtype=np.int64)
+    if len(hits):
+        geometries = np.asarray(state.scene.building_geoms, dtype=object)[hits]
+        rings = shapely.get_exterior_ring(geometries)
+        coordinates, owners = shapely.get_coordinates(rings, return_index=True)
+        counts = np.bincount(owners, minlength=len(hits))
+        valid = counts > 0
+        if not valid.all():
+            coordinates = coordinates[valid[owners]]
+            counts = counts[valid]
+            hits = hits[valid]
+    else:
+        coordinates = np.empty((0, 2), dtype=np.float64)
+        counts = np.empty(0, dtype=np.int64)
+
+    lon, lat = _to_ll.transform(coordinates[:, 0], coordinates[:, 1])
+    encoded_coordinates = np.empty((len(coordinates), 2), dtype="<i4")
+    encoded_coordinates[:, 0] = np.rint(lon * 1_000_000).astype(np.int32)
+    encoded_coordinates[:, 1] = np.rint(lat * 1_000_000).astype(np.int32)
+    offsets = np.empty(len(hits) + 1, dtype="<u4")
+    offsets[0] = 0
+    offsets[1:] = np.cumsum(counts, dtype=np.uint32)
+
+    return b"".join(
+        (
+            struct.pack("<4sII", PACKED_BUILDING_MAGIC, len(hits), len(coordinates)),
+            hits.astype("<i4", copy=False).tobytes(),
+            state.scene.building_heights_m[hits].astype("<f4", copy=False).tobytes(),
+            state.scene.building_bases_m[hits].astype("<f4", copy=False).tobytes(),
+            offsets.tobytes(),
+            encoded_coordinates.tobytes(),
+        )
+    )
+
+
+@app.get("/api/buildings.bin")
+def packed_buildings(bbox: str) -> Response:
+    """One compact, complete building viewport for the navigation client.
+
+    A response above the packed safety cap contains only an empty header and a
+    truncation flag. The client then falls back to the bounded JSON tile path;
+    it never mistakes an incomplete skyline for complete geometry.
+    """
+    state = _state()
+    west, south, east, north = (float(v) for v in bbox.split(","))
+    (x0, x1), (y0, y1) = _ll_to_xy_box(west, south, east, north)
+    hits = state.scene.building_tree.query(shapely.box(x0, y0, x1, y1))
+    truncated = len(hits) > MAX_PACKED_BUILDINGS_PER_RESPONSE
+    content = _packed_buildings(state, hits[:0] if truncated else hits)
+    return Response(
+        content=content,
+        media_type="application/vnd.shadeway.buildings",
+        headers={
+            "x-shadeway-truncated": "1" if truncated else "0",
+            # Footprints/heights are immutable for the deployed city. Let the
+            # browser and Render's edge reuse an identical padded viewport.
+            "cache-control": "public, max-age=300, stale-while-revalidate=60",
+        },
+    )
 
 
 def _ll_to_xy_box(west: float, south: float, east: float, north: float):
