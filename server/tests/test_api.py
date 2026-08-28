@@ -43,6 +43,36 @@ def test_health_reports_the_real_scene(client):
     assert payload["router_revision"] == "batched-corridor-v1"
 
 
+def test_concurrent_cold_requests_build_one_authoritative_state(monkeypatch):
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    from shadeway import api
+
+    built = object()
+    build_count = 0
+    count_lock = threading.Lock()
+
+    def build_once():
+        nonlocal build_count
+        with count_lock:
+            build_count += 1
+        # Keep the first builder in flight long enough for every worker to
+        # observe the cold boundary. Without _STATE_LOCK each one builds.
+        time.sleep(0.03)
+        return built
+
+    monkeypatch.setattr(api, "STATE", None)
+    monkeypatch.setattr(api.AppState, "build", build_once)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        states = list(pool.map(lambda _: api._state(), range(8)))
+
+    assert build_count == 1
+    assert all(state is built for state in states)
+
+
 def test_place_search_is_exposed_through_the_real_api(client, monkeypatch):
     from shadeway import api
 

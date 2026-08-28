@@ -275,6 +275,10 @@ input[type="range"]::-moz-range-thumb {
   position: relative;
   overflow: hidden;
 }
+.map-viewport {
+  position: absolute;
+  inset: 0;
+}
 .map-loading {
   position: absolute;
   inset: 0;
@@ -1191,9 +1195,12 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1.05;
   letter-spacing: -0.01em;
 }
-.map-context span:last-child {
+.map-context > span:not(.eyebrow) {
   color: var(--ink-3);
   font-size: 10.5px;
+}
+.map-context span.is-active {
+  color: var(--sun);
 }
 .map-tooltip {
   position: absolute;

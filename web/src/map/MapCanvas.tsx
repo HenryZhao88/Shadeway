@@ -14,10 +14,16 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { AMENITY_LABEL, type Amenity, type Bbox } from '../api/client';
 import { degrees, heatCategory } from '../heat';
-import { chosenRouteId, useStore, type BuildingLoadOptions } from '../state/store';
+import { chosenRouteId, useStore } from '../state/store';
 import { clock, sunPosition } from '../sun/position';
 import type { UnitSystem } from '../units';
 import { BASEMAP_URL, FALLBACK_STYLE, INITIAL_VIEW } from './basemapStyle';
+import {
+  bboxFor,
+  fitRoute,
+  renderBudget,
+  type ViewState,
+} from './camera';
 import {
   amenityLayer,
   buildingLayer,
@@ -31,36 +37,15 @@ import {
 } from './layers';
 import { shadowPolygons } from './shadows';
 
-interface ViewState {
-  longitude: number;
-  latitude: number;
-  zoom: number;
-  pitch: number;
-  bearing: number;
-}
-
 /** Refetching viewport data on every frame of a pan would hammer the server for
  *  no visual gain, so wait for the camera to settle. */
 const VIEW_SETTLE_MS = 260;
 const MAX_VIEW_RETRIES = 5;
-const STREET_DETAIL_ZOOM = 14.8;
-
-/** City overview uses the basemap, as navigation apps do; fetching tens of
- * thousands of custom prisms there adds no readable detail and can exhaust a
- * small server. Street scale switches to every real occluder in bounded tiles
- * and casts exact moving shadows. */
-function renderBudget(
-  view: ViewState,
-): { buildingLoad: BuildingLoadOptions; showShadows: boolean } {
-  if (view.zoom < STREET_DETAIL_ZOOM) {
-    return { buildingLoad: { maxFeatures: 0, complete: false }, showShadows: false };
-  }
-  return { buildingLoad: { maxFeatures: 450, complete: true }, showShadows: true };
-}
 
 export default function MapCanvas() {
   const [viewState, setViewState] = useState<ViewState>({ ...INITIAL_VIEW });
   const [basemapFailed, setBasemapFailed] = useState(false);
+  const [isRotating, setIsRotating] = useState(false);
   const [tooltip, setTooltip] = useState<{
     x: number;
     y: number;
@@ -279,14 +264,22 @@ export default function MapCanvas() {
     [destination, origin, pickMode, plant, setPlace],
   );
 
-  const cursor =
+  const restingCursor =
     pickMode === 'none' && origin && destination ? 'grab' : 'crosshair';
 
   return (
-    <>
+    <div
+      className="map-viewport"
+      onContextMenu={(event) => event.preventDefault()}
+    >
       <DeckGL
         viewState={viewState}
-        controller={{ dragRotate: true, touchRotate: true }}
+        controller={{
+          dragPan: true,
+          dragRotate: true,
+          touchRotate: true,
+          inertia: 180,
+        }}
         layers={layers}
         onViewStateChange={({ viewState: next }) => {
           const view = next as ViewState;
@@ -295,7 +288,10 @@ export default function MapCanvas() {
         }}
         onHover={onHover}
         onClick={onClick}
-        getCursor={() => cursor}
+        onInteractionStateChange={(state) => {
+          setIsRotating(Boolean(state.isRotating));
+        }}
+        getCursor={({ isDragging }) => (isDragging ? 'grabbing' : restingCursor)}
         style={{ position: 'absolute', inset: '0' }}
       >
         <MapLibreMap
@@ -346,9 +342,16 @@ export default function MapCanvas() {
       <div className="map-overlay map-context" aria-hidden="true">
         <span className="eyebrow">New York City</span>
         <b>{budget.showShadows ? 'street shade' : 'city overview'}</b>
-        <span>{budget.showShadows ? 'live building shadows' : 'zoom in for live shadows'}</span>
+        <span>
+          {budget.showShadows
+            ? 'live 3D buildings and shadows'
+            : 'zoom in for 3D buildings'}
+        </span>
+        <span className={isRotating ? 'is-active' : undefined}>
+          {isRotating ? 'rotating and tilting' : 'right-drag to rotate and tilt'}
+        </span>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -387,44 +390,4 @@ function pickedLabel(info: PickingInfo): string {
     return amenity.name || AMENITY_LABEL[amenity.kind] || 'Selected place';
   }
   return 'Dropped pin';
-}
-
-function fitRoute(
-  current: ViewState,
-  origin: { lat: number; lon: number },
-  destination: { lat: number; lon: number },
-): ViewState {
-  const lonSpan = Math.max(0.001, Math.abs(origin.lon - destination.lon));
-  const latSpan = Math.max(0.001, Math.abs(origin.lat - destination.lat));
-  const span = Math.max(lonSpan, latSpan / 0.62);
-  // Navigation should fill the map with the trip, not load several surrounding
-  // neighbourhoods. The previous 2.4 factor made this short route occupy only
-  // a small part of the canvas and multiplied the building viewport by ~6.5.
-  const zoom = Math.max(12.5, Math.min(16.7, Math.log2(360 / (span * 0.95))));
-  return {
-    ...current,
-    longitude: (origin.lon + destination.lon) / 2,
-    latitude: (origin.lat + destination.lat) / 2,
-    zoom,
-    pitch: 40,
-    bearing: 0,
-  };
-}
-
-/** Approximate viewport bounds from the camera. Exact bounds would need the
- *  unprojected corners of a pitched frustum; this is a data-fetch window, and
- *  a generous one costs a few extra pins, not correctness. */
-function bboxFor(view: ViewState): Bbox {
-  const spanLon = 360 / 2 ** view.zoom;
-  const spanLat = spanLon * 0.62;
-  // A pitched camera sees further toward the horizon than a flat one, but only
-  // a little further is worth fetching: the rest is a haze of rooftops that
-  // costs a thousand footprints and shows nothing.
-  const reach = 1 + view.pitch / 110;
-  return [
-    view.longitude - spanLon * reach,
-    view.latitude - spanLat * reach,
-    view.longitude + spanLon * reach,
-    view.latitude + spanLat * reach,
-  ];
 }

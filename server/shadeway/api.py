@@ -141,12 +141,20 @@ class AppState:
 
 
 STATE: AppState | None = None
+_STATE_LOCK = threading.Lock()
 
 
 def _state() -> AppState:
     global STATE
     if STATE is None:
-        STATE = AppState.build()
+        # FastAPI runs sync handlers in a thread pool. A cold browser can issue
+        # amenities and several building-tile requests together, so an
+        # unguarded lazy initializer can construct the ~400 MB city more than
+        # once before any thread publishes STATE. Build exactly one
+        # authoritative instance and let the other first requests share it.
+        with _STATE_LOCK:
+            if STATE is None:
+                STATE = AppState.build()
     return STATE
 
 

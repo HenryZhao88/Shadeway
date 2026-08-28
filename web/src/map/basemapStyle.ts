@@ -27,13 +27,13 @@ export const FALLBACK_STYLE: StyleSpecification = {
   glyphs: undefined,
 };
 
-/** Manhattan in context, rather than a single Midtown block. The opening view
- * makes it clear that this is a city-scale map; zooming in brings the shadow
- * model down to the individual building. */
+/** Open close enough for the real building geometry to be visible immediately.
+ * A city-wide opening used to request no buildings by design, which made the
+ * main feature look broken before anyone had interacted with the map. */
 export const INITIAL_VIEW = {
   longitude: -73.9812,
   latitude: 40.745,
-  zoom: 11.7,
-  pitch: 34,
+  zoom: 15.4,
+  pitch: 48,
   bearing: -16,
 } as const;
