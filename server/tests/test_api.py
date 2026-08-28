@@ -379,6 +379,24 @@ def test_buildings_report_when_they_were_cut_off(client):
     assert payload["truncated"] is True
 
 
+def test_buildings_endpoint_caps_untrusted_feature_limits(client):
+    """A stale client cannot exhaust the small production process with a
+    city-wide polygon serialization request."""
+    from shadeway.api import MAX_BUILDINGS_PER_RESPONSE, _state
+
+    state = _state()
+    lon, lat = state.graph.node_lonlat[0]
+    payload = client.get(
+        "/api/buildings",
+        params={
+            "bbox": f"{lon - 0.05},{lat - 0.05},{lon + 0.05},{lat + 0.05}",
+            "max_features": 20_000,
+        },
+    ).json()
+
+    assert len(payload["buildings"]) <= MAX_BUILDINGS_PER_RESPONSE
+
+
 def test_a_bbox_with_nothing_in_it_is_not_an_error(client):
     payload = client.get("/api/buildings", params={"bbox": "10,10,10.1,10.1"}).json()
     assert payload == {"buildings": [], "truncated": False}

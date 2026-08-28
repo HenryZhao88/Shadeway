@@ -45,15 +45,16 @@ const VIEW_SETTLE_MS = 260;
 const MAX_VIEW_RETRIES = 5;
 const STREET_DETAIL_ZOOM = 14.1;
 
-/** At city scale, a complete Manhattan building layer is dramatically more
- * useful than a handful of blocks. The client deliberately skips shadows at
- * this scale: sweeping thousands of tiny roofs makes an unreadable dark field.
- * At street scale, it switches back to every available occluder and exact,
- * moving shadows. */
+/** Keep map furniture inside the production process's memory envelope. The
+ * real city, horizon cache and a response containing 11,000 polygon objects
+ * do not fit together in Render's 512 MB Free instance. Tallest-first keeps
+ * the skyline legible at city scale; street scale gets the full safe budget.
+ * The client deliberately skips shadows until street scale: sweeping thousands
+ * of tiny roofs makes an unreadable dark field anyway. */
 function renderBudget(view: ViewState) {
-  if (view.zoom < 12.5) return { buildings: 11000, showShadows: false };
-  if (view.zoom < STREET_DETAIL_ZOOM) return { buildings: 6500, showShadows: false };
-  return { buildings: 3600, showShadows: true };
+  if (view.zoom < 12.5) return { buildings: 1800, showShadows: false };
+  if (view.zoom < STREET_DETAIL_ZOOM) return { buildings: 2200, showShadows: false };
+  return { buildings: 2600, showShadows: true };
 }
 
 export default function MapCanvas() {

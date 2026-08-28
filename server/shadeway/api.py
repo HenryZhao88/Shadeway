@@ -178,6 +178,12 @@ _ROUTE_CACHE: "OrderedDict[tuple[str, str], tuple[Route, list[int], RouteRequest
 _ROUTE_CACHE_MAX = 64
 _ROUTE_CACHE_LOCK = threading.RLock()
 GEOCODER = Geocoder()
+# The Free Render instance has 512 MB for the city, horizon cache, and the
+# temporary Python objects made while serialising map polygons.  Sending the
+# whole city in one response can briefly exceed that limit and kill the worker.
+# Keep this server-side as well as in the UI: a stale browser bundle must not be
+# able to turn a viewport request into an outage.
+MAX_BUILDINGS_PER_RESPONSE = 2_600
 
 
 def _remember(
@@ -641,6 +647,7 @@ def buildings(
     least. Returned as plain dicts, like /api/amenities: it is map furniture,
     not part of the frozen route contract.
     """
+    max_features = min(max_features, MAX_BUILDINGS_PER_RESPONSE)
     state = _state()
     west, south, east, north = (float(v) for v in bbox.split(","))
     (x0, x1), (y0, y1) = _ll_to_xy_box(west, south, east, north)
