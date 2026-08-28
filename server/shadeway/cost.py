@@ -8,7 +8,7 @@ both sides testable in isolation.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -121,6 +121,106 @@ class EdgeCostModel:
             hit = self._compute(int(edge_id), enter_at)
             self._cost_cache[key] = hit
         return hit
+
+    def prefetch(self, edge_ids: np.ndarray, minute_keys: np.ndarray) -> None:
+        """Vectorise all feasible ``(edge, minute)`` thermal costs.
+
+        A route search used to invoke several small NumPy kernels for every
+        edge relaxation. Most sidewalk edges carry only a handful of samples,
+        so dispatching those kernels thousands of times cost far more than the
+        arithmetic itself on small hosting CPUs. The router already knows its
+        exact time corridor; this method evaluates that corridor in one batch
+        per solar minute and fills the same cache consumed by ``traverse``.
+
+        This is purely a scheduling optimisation. Cache keys, minute-level sun
+        precision, sample-level physics, and returned ``EdgeCost`` values are
+        identical to the scalar path.
+        """
+        edges = np.asarray(edge_ids, dtype=np.int64)
+        minutes = np.asarray(minute_keys, dtype=np.int64)
+        if not len(edges):
+            return
+        if edges.shape != minutes.shape:
+            raise ValueError("edge_ids and minute_keys must have the same shape")
+
+        missing = np.fromiter(
+            (
+                (int(edge_id), int(minute)) not in self._cost_cache
+                for edge_id, minute in zip(edges, minutes)
+            ),
+            dtype=bool,
+            count=len(edges),
+        )
+        if not missing.any():
+            return
+        edges = edges[missing]
+        minutes = minutes[missing]
+        order = np.argsort(minutes, kind="stable")
+        edges = edges[order]
+        minutes = minutes[order]
+        boundaries = np.flatnonzero(np.r_[True, minutes[1:] != minutes[:-1], True])
+        for start, stop in zip(boundaries[:-1], boundaries[1:]):
+            self._prefetch_minute(edges[start:stop], int(minutes[start]))
+
+    def _prefetch_minute(self, edges: np.ndarray, minute_key: int) -> None:
+        graph = self.graph
+        counts = graph.sample_count[edges].astype(np.int64, copy=False)
+        if np.any(counts <= 0):
+            # Built city edges always have samples. Preserve the scalar
+            # behaviour for experimental graphs rather than inventing a mean
+            # over an empty edge.
+            when = datetime.fromtimestamp(minute_key * 60, tz=UTC)
+            for edge_id in edges:
+                key = (int(edge_id), minute_key)
+                self._cost_cache.setdefault(key, self._compute(int(edge_id), when))
+            return
+
+        offsets = np.cumsum(counts) - counts
+        repeated_offsets = np.repeat(offsets, counts)
+        sample_ids = (
+            np.repeat(graph.sample_start[edges], counts)
+            + np.arange(int(counts.sum()), dtype=np.int64)
+            - repeated_offsets
+        )
+        when = datetime.fromtimestamp(minute_key * 60, tz=UTC)
+        azimuth, elevation = self._sun(when)
+        f_sun = self.horizon.f_sun(sample_ids, azimuth, elevation)
+        svf = self.horizon.svf(sample_ids)
+        radiation = tmrt_mod.RadiationInputs(
+            direct_normal_wm2=self.weather.direct_normal_wm2,
+            diffuse_wm2=self.weather.diffuse_wm2,
+            global_horizontal_wm2=self.weather.global_horizontal_wm2,
+            air_temp_c=self.weather.air_temp_c,
+            relative_humidity_pct=self.weather.relative_humidity_pct,
+            cloud_cover_pct=self.weather.cloud_cover_pct,
+            solar_elevation_deg=elevation,
+        )
+        tmrt_values = tmrt_mod.tmrt_c_vec(
+            radiation, f_sun, svf, self.sample_albedo[sample_ids]
+        )
+        feels_like = self.utci_table.lookup(tmrt_values)
+
+        def means(values) -> np.ndarray:
+            return np.add.reduceat(np.asarray(values), offsets) / counts
+
+        mean_feels = means(feels_like)
+        mean_f_sun = means(f_sun)
+        mean_svf = means(svf)
+        mean_tmrt = means(tmrt_values)
+        mean_canopy = means((f_sun > 0.0) & (f_sun < 1.0))
+        durations = self.edge_durations()[edges]
+        for index, edge_id in enumerate(edges):
+            duration_s = float(durations[index])
+            feels = float(mean_feels[index])
+            self._cost_cache[(int(edge_id), minute_key)] = EdgeCost(
+                duration_s=duration_s,
+                heat_degree_minutes=feels * (duration_s / 60.0),
+                mean_feels_like_c=feels,
+                mean_f_sun=float(mean_f_sun[index]),
+                mean_svf=float(mean_svf[index]),
+                mean_tmrt_c=float(mean_tmrt[index]),
+                mean_canopy_fraction=float(mean_canopy[index]),
+            )
 
     def _compute(self, edge_id: int, enter_at: datetime) -> EdgeCost:
         graph = self.graph

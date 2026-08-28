@@ -24,7 +24,7 @@ LAST_STATS: dict[str, float] = {}
 
 DEFAULT_DETOUR_FACTOR = 1.7  # how much longer than the fastest walk we explore
 DEFAULT_DETOUR_SLACK_S = 120.0  # ...plus this, so short walks still get options
-DEFAULT_MAX_EXTRA_S = 1200.0  # and never more than twenty extra minutes, ever
+DEFAULT_MAX_EXTRA_S = 120.0  # navigation alternatives never add over two minutes
 
 
 @dataclass
@@ -116,6 +116,7 @@ def search(
     collect_stats: bool = False,
     remaining_s=None,
     budget_s: float | None = None,
+    edge_durations=None,
 ):
     """`remaining_s` / `budget_s` come from `time_to_target` and are optional.
 
@@ -160,6 +161,17 @@ def search(
         for edge_id in graph.neighbours(label.node):
             edge_id = int(edge_id)
             nxt = graph.other_end(edge_id, label.node)
+            # Walking time is independent of shade and time of day. When the
+            # cost model supplies the same authoritative durations used to
+            # construct the corridor bound, reject an impossible edge before
+            # doing its substantially more expensive thermal calculation.
+            # The check after cost_fn remains for callers without durations
+            # and as a correctness guard for custom cost models.
+            if edge_durations is not None and over_budget(
+                nxt,
+                label.arrival_s + float(edge_durations[edge_id]),
+            ):
+                continue
             cost = cost_fn(edge_id, enter_at)
             candidate = (
                 label.arrival_s + cost.duration_s,

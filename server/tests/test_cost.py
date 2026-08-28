@@ -75,6 +75,39 @@ def test_f_sun_and_svf_are_reported_for_the_ui(model):
     assert 0.0 <= result.mean_svf <= 1.0
 
 
+def test_prefetched_costs_match_scalar_costs(model):
+    graph, scalar = model
+    prefetched = EdgeCostModel(
+        horizon=scalar.horizon,
+        weather=WEATHER,
+        sample_albedo=graph.sample_albedo,
+        lat=40.7536,
+        lon=-73.9840,
+        walk_speed_ms=1.35,
+    )
+    prefetched.bind_graph(graph)
+    edges = np.array([0, 1, 2, 3], dtype=np.int64)
+    minute = int(NOON.timestamp() // 60)
+    prefetched.prefetch(edges, np.full(len(edges), minute, dtype=np.int64))
+
+    for edge_id in edges:
+        expected = scalar._compute(int(edge_id), NOON)
+        actual = prefetched.traverse(int(edge_id), NOON)
+        assert actual.duration_s == pytest.approx(expected.duration_s)
+        assert actual.heat_degree_minutes == pytest.approx(
+            expected.heat_degree_minutes, rel=1e-6
+        )
+        assert actual.mean_feels_like_c == pytest.approx(
+            expected.mean_feels_like_c, rel=1e-6
+        )
+        assert actual.mean_f_sun == pytest.approx(expected.mean_f_sun, abs=1e-7)
+        assert actual.mean_svf == pytest.approx(expected.mean_svf, abs=1e-7)
+        assert actual.mean_tmrt_c == pytest.approx(expected.mean_tmrt_c, rel=1e-6)
+        assert actual.mean_canopy_fraction == pytest.approx(
+            expected.mean_canopy_fraction, abs=1e-7
+        )
+
+
 def test_canopy_is_classified_before_edge_sun_is_averaged():
     # Both arrays average to 0.5. Only the second is transmissive canopy; the
     # first is a mix of opaque building shade and open sky.

@@ -159,3 +159,39 @@ def test_the_bound_actually_settles_fewer_nodes(graph):
         remaining_s=remaining, budget_s=budget,
     )
     assert bicriteria.LAST_STATS["settled_nodes"] < unbounded_nodes
+
+
+def test_bound_rejects_impossible_edges_before_evaluating_thermal_cost(graph):
+    """Duration and thermal cost share one authoritative duration array, so
+    early rejection must preserve the frontier while avoiding wasted physics."""
+    origin, destination = _ends(graph)
+    durations = _durations(graph)
+    remaining, budget = bicriteria.time_to_target(
+        graph, destination, durations, origin=origin
+    )
+    evaluated_without_early_bound: list[int] = []
+    base_cost = _cost(graph, set())
+
+    def counted_cost(edge_id, enter_at):
+        evaluated_without_early_bound.append(int(edge_id))
+        return base_cost(edge_id, enter_at)
+
+    expected = bicriteria.search(
+        graph, origin, destination, DEPART, counted_cost,
+        remaining_s=remaining, budget_s=budget,
+    )
+    evaluated_with_early_bound: list[int] = []
+
+    def early_counted_cost(edge_id, enter_at):
+        evaluated_with_early_bound.append(int(edge_id))
+        return base_cost(edge_id, enter_at)
+
+    actual = bicriteria.search(
+        graph, origin, destination, DEPART, early_counted_cost,
+        remaining_s=remaining, budget_s=budget, edge_durations=durations,
+    )
+
+    assert [(p.duration_s, p.heat_dm) for p in actual] == [
+        (p.duration_s, p.heat_dm) for p in expected
+    ]
+    assert len(evaluated_with_early_bound) < len(evaluated_without_early_bound)
