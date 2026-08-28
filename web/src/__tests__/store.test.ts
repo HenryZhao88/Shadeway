@@ -299,6 +299,41 @@ describe('choosing a route', () => {
 });
 
 describe('viewport data', () => {
+  test('skips custom building requests at city overview zoom', async () => {
+    const spy = vi.fn(mockFetch());
+    vi.stubGlobal('fetch', spy);
+
+    const ok = await useStore.getState().fetchViewportData(
+      [-74.1, 40.65, -73.85, 40.85],
+      { maxFeatures: 0, complete: false },
+    );
+
+    expect(ok).toBe(true);
+    expect(
+      spy.mock.calls.filter(([url]) => String(url).includes('/buildings')),
+    ).toHaveLength(0);
+    expect(useStore.getState().buildings).toEqual([]);
+  });
+
+  test('uses bounded tiled requests for a complete street viewport', async () => {
+    const spy = vi.fn(mockFetch());
+    vi.stubGlobal('fetch', spy);
+
+    const ok = await useStore.getState().fetchViewportData(
+      [-74, 40.74, -73.97, 40.76],
+      { maxFeatures: 450, complete: true },
+    );
+
+    expect(ok).toBe(true);
+    const buildingCalls = spy.mock.calls.filter(([url]) =>
+      String(url).includes('/buildings'),
+    );
+    expect(buildingCalls.length).toBeGreaterThan(1);
+    expect(
+      buildingCalls.every(([url]) => String(url).includes('max_features=450')),
+    ).toBe(true);
+  });
+
   test('a failed amenity fetch does not disturb the route', async () => {
     await useStore.getState().fetchRoute();
     vi.stubGlobal(

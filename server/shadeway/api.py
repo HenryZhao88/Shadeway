@@ -183,7 +183,7 @@ GEOCODER = Geocoder()
 # whole city in one response can briefly exceed that limit and kill the worker.
 # Keep this server-side as well as in the UI: a stale browser bundle must not be
 # able to turn a viewport request into an outage.
-MAX_BUILDINGS_PER_RESPONSE = 2_600
+MAX_BUILDINGS_PER_RESPONSE = 2_000
 
 
 def _remember(
@@ -634,7 +634,9 @@ def amenities(bbox: str) -> list[dict[str, object]]:
 
 @app.get("/api/buildings")
 def buildings(
-    bbox: str, max_features: int = Query(default=4000, ge=1, le=20000)
+    bbox: str,
+    max_features: int = Query(default=1000, ge=1, le=20000),
+    omit_truncated: bool = False,
 ) -> dict[str, object]:
     """Occluder footprints for the viewport, so the client can cast its own
     shadows on the GPU.
@@ -647,7 +649,6 @@ def buildings(
     least. Returned as plain dicts, like /api/amenities: it is map furniture,
     not part of the frozen route contract.
     """
-    max_features = min(max_features, MAX_BUILDINGS_PER_RESPONSE)
     state = _state()
     west, south, east, north = (float(v) for v in bbox.split(","))
     (x0, x1), (y0, y1) = _ll_to_xy_box(west, south, east, north)
@@ -656,10 +657,20 @@ def buildings(
     if len(hits) == 0:
         return {"buildings": [], "truncated": False}
 
+    response_limit = min(max_features, MAX_BUILDINGS_PER_RESPONSE)
+    if omit_truncated and len(hits) > response_limit:
+        # A tiled caller will subdivide this box. Do not spend CPU and memory
+        # encoding a partial parent payload that it must immediately discard.
+        return {"buildings": [], "truncated": True}
+
     heights = (
         state.scene.building_bases_m[hits] + state.scene.building_heights_m[hits]
     )
-    order = np.argsort(-heights)[:max_features]
+    # A single city-scale JSON response briefly exists as Python objects, an
+    # encoded body, and gzip input/output. Respect the caller's smaller limit
+    # but clamp oversized/old-client requests so map furniture can never push a
+    # small public instance over its memory limit.
+    order = np.argsort(-heights)[:response_limit]
     out = []
     for index in hits[order]:
         geom = state.scene.building_geoms[int(index)]
@@ -679,7 +690,7 @@ def buildings(
                 ],
             }
         )
-    return {"buildings": out, "truncated": bool(len(hits) > max_features)}
+    return {"buildings": out, "truncated": bool(len(hits) > response_limit)}
 
 
 def _ll_to_xy_box(west: float, south: float, east: float, north: float):

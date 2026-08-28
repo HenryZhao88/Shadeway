@@ -21,6 +21,7 @@ import {
   ApiError,
   getAmenities,
   getBuildings,
+  getCompleteBuildings,
   getDepartureCurve,
   getHealth,
   getTimeseries,
@@ -93,6 +94,11 @@ export type LocationStatus =
   | 'unavailable';
 export type OriginMode = 'custom' | 'current';
 
+export interface BuildingLoadOptions {
+  maxFeatures: number;
+  complete: boolean;
+}
+
 interface State {
   origin: Place | null;
   destination: Place | null;
@@ -155,7 +161,10 @@ interface State {
   fetchTimeseries: () => Promise<void>;
   fetchDeparture: () => Promise<void>;
   /** Resolves false when the fetch failed, so the caller can retry. */
-  fetchViewportData: (bbox: Bbox, maxFeatures?: number) => Promise<boolean>;
+  fetchViewportData: (
+    bbox: Bbox,
+    buildingLoad?: BuildingLoadOptions,
+  ) => Promise<boolean>;
   fetchHealth: () => Promise<void>;
   plant: (positions: LatLon[]) => Promise<void>;
 }
@@ -470,14 +479,23 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  fetchViewportData: async (bbox, maxFeatures = 2600) => {
+  fetchViewportData: async (
+    bbox,
+    buildingLoad = { maxFeatures: 600, complete: false },
+  ) => {
     viewportAbort?.abort();
     viewportAbort = new AbortController();
     const signal = viewportAbort.signal;
     try {
+      const buildingRequest =
+        buildingLoad.maxFeatures > 0
+          ? buildingLoad.complete
+            ? getCompleteBuildings(bbox, buildingLoad.maxFeatures, signal)
+            : getBuildings(bbox, buildingLoad.maxFeatures, signal)
+          : Promise.resolve({ buildings: [], truncated: false });
       const [amenities, buildings] = await Promise.all([
         getAmenities(bbox, signal),
-        getBuildings(bbox, maxFeatures, signal),
+        buildingRequest,
       ]);
       if (signal.aborted) return false;
       set({

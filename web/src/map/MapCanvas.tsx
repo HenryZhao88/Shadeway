@@ -14,7 +14,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { AMENITY_LABEL, type Amenity, type Bbox } from '../api/client';
 import { degrees, heatCategory } from '../heat';
-import { chosenRouteId, useStore } from '../state/store';
+import { chosenRouteId, useStore, type BuildingLoadOptions } from '../state/store';
 import { clock, sunPosition } from '../sun/position';
 import type { UnitSystem } from '../units';
 import { BASEMAP_URL, FALLBACK_STYLE, INITIAL_VIEW } from './basemapStyle';
@@ -43,18 +43,19 @@ interface ViewState {
  *  no visual gain, so wait for the camera to settle. */
 const VIEW_SETTLE_MS = 260;
 const MAX_VIEW_RETRIES = 5;
-const STREET_DETAIL_ZOOM = 14.1;
+const STREET_DETAIL_ZOOM = 14.8;
 
-/** Keep map furniture inside the production process's memory envelope. The
- * real city, horizon cache and a response containing 11,000 polygon objects
- * do not fit together in Render's 512 MB Free instance. Tallest-first keeps
- * the skyline legible at city scale; street scale gets the full safe budget.
- * The client deliberately skips shadows until street scale: sweeping thousands
- * of tiny roofs makes an unreadable dark field anyway. */
-function renderBudget(view: ViewState) {
-  if (view.zoom < 12.5) return { buildings: 1800, showShadows: false };
-  if (view.zoom < STREET_DETAIL_ZOOM) return { buildings: 2200, showShadows: false };
-  return { buildings: 2600, showShadows: true };
+/** City overview uses the basemap, as navigation apps do; fetching tens of
+ * thousands of custom prisms there adds no readable detail and can exhaust a
+ * small server. Street scale switches to every real occluder in bounded tiles
+ * and casts exact moving shadows. */
+function renderBudget(
+  view: ViewState,
+): { buildingLoad: BuildingLoadOptions; showShadows: boolean } {
+  if (view.zoom < STREET_DETAIL_ZOOM) {
+    return { buildingLoad: { maxFeatures: 0, complete: false }, showShadows: false };
+  }
+  return { buildingLoad: { maxFeatures: 450, complete: true }, showShadows: true };
 }
 
 export default function MapCanvas() {
@@ -150,7 +151,7 @@ export default function MapCanvas() {
           retryCount.current = 0;
         }
         lastBbox.current = key;
-        void fetchViewportData(box, renderBudget(next).buildings).then((ok) => {
+        void fetchViewportData(box, renderBudget(next).buildingLoad).then((ok) => {
           if (ok) {
             retryCount.current = 0;
             return;
@@ -396,7 +397,10 @@ function fitRoute(
   const lonSpan = Math.max(0.001, Math.abs(origin.lon - destination.lon));
   const latSpan = Math.max(0.001, Math.abs(origin.lat - destination.lat));
   const span = Math.max(lonSpan, latSpan / 0.62);
-  const zoom = Math.max(12.5, Math.min(16.7, Math.log2(360 / (span * 2.4))));
+  // Navigation should fill the map with the trip, not load several surrounding
+  // neighbourhoods. The previous 2.4 factor made this short route occupy only
+  // a small part of the canvas and multiplied the building viewport by ~6.5.
+  const zoom = Math.max(12.5, Math.min(16.7, Math.log2(360 / (span * 0.95))));
   return {
     ...current,
     longitude: (origin.lon + destination.lon) / 2,
