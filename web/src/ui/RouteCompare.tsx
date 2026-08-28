@@ -46,7 +46,10 @@ export default function RouteCompare() {
       </div>
 
       <Verdict chosen={chosen} fastest={fastest} unitSystem={unitSystem} />
-      <Exposure route={chosen} unitSystem={unitSystem} />
+      <details className="route-details">
+        <summary>More details</summary>
+        <Exposure route={chosen} unitSystem={unitSystem} />
+      </details>
 
       {options.length === 1 ? (
         <p className="hint" style={{ marginTop: 10 }}>

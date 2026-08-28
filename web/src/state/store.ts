@@ -146,7 +146,7 @@ interface State {
   commitDeparture: () => void;
   setPlace: (which: 'origin' | 'destination', place: Place) => void;
   clearPlace: (which: 'origin' | 'destination') => void;
-  setTrip: (origin: Place, destination: Place) => void;
+  setTrip: (origin: Place, destination: Place, departAt?: Date) => void;
   selectCurrentLocation: () => void;
   updateCurrentLocation: (place: CurrentLocation) => void;
   setLocationStatus: (status: LocationStatus, error?: string | null) => void;
@@ -286,10 +286,17 @@ export const useStore = create<State>((set, get) => ({
       overrideRouteId: null,
     } as Partial<State>),
 
-  setTrip: (origin, destination) => {
+  setTrip: (origin, destination, departAt) => {
+    clearTimeout(debounceTimer);
     set({
       origin,
       destination,
+      ...(departAt
+        ? {
+            scrubAt: new Date(departAt),
+            departAt: new Date(departAt),
+          }
+        : {}),
       originMode: 'custom',
       pickMode: 'none',
       route: null,

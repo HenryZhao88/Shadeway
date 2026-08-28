@@ -13,18 +13,33 @@ const PRESETS: {
   label: string;
   from: typeof DEFAULT_ORIGIN;
   to: typeof DEFAULT_ORIGIN;
+  demoHour?: number;
 }[] = [
+  {
+    label: '1-min shade detour · Penn → Rockefeller',
+    from: { lat: 40.7506, lon: -73.9935, label: 'Penn Station' },
+    to: {
+      lat: 40.7587,
+      lon: -73.9787,
+      label: 'Rockefeller Center',
+    },
+    demoHour: 15,
+  },
   {
     label: 'Times Sq → Grand Central',
     from: DEFAULT_ORIGIN,
     to: DEFAULT_DESTINATION,
   },
-  {
-    label: 'Bryant Park → Herald Sq',
-    from: { lat: 40.7536, lon: -73.984, label: 'Bryant Park' },
-    to: { lat: 40.7497, lon: -73.9881, label: 'Herald Square' },
-  },
 ];
+
+/** Keep the featured route honest and useful even after today's afternoon has
+ * passed. Regular routes still use the time the user selected. */
+function nextDemoDeparture(hour: number, now = new Date()): Date {
+  const departure = new Date(now);
+  if (departure.getHours() >= hour) departure.setDate(departure.getDate() + 1);
+  departure.setHours(hour, 0, 0, 0);
+  return departure;
+}
 
 export default function Endpoints() {
   const watchId = useRef<number | null>(null);
@@ -300,12 +315,21 @@ export default function Endpoints() {
               type="button"
               key={preset.label}
               className="chip"
-              onClick={() => setTrip(preset.from, preset.to)}
+              onClick={() =>
+                setTrip(
+                  preset.from,
+                  preset.to,
+                  preset.demoHour == null
+                    ? undefined
+                    : nextDemoDeparture(preset.demoHour),
+                )
+              }
             >
               {preset.label}
             </button>
           ))}
         </div>
+        <small className="sample-note">The shade demo uses the next 3 PM sun.</small>
       </details>
     </section>
   );

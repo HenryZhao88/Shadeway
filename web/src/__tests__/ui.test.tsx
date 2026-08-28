@@ -510,6 +510,17 @@ describe('RouteTimeseries', () => {
 });
 
 describe('RouteCompare exposure stats', () => {
+  test('keeps advanced exposure metrics collapsed by default', async () => {
+    loadRoute();
+    render(<RouteCompare />);
+
+    const details = screen.getByText('More details').closest('details');
+    expect(details).not.toHaveAttribute('open');
+
+    await userEvent.click(screen.getByText('More details'));
+    expect(details).toHaveAttribute('open');
+  });
+
   test('surfaces what the recommendation is made of', () => {
     loadRoute();
     render(<RouteCompare />);

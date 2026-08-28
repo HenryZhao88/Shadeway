@@ -57,6 +57,22 @@ describe('route planner', () => {
     expect(useStore.getState().route).toBeNull();
   });
 
+  test('the featured sample loads a visible afternoon shade detour', async () => {
+    render(<Endpoints />);
+
+    await userEvent.click(screen.getByText('or try a sample NYC trip'));
+    await userEvent.click(screen.getByText(/1-min shade detour/i));
+
+    await vi.waitFor(() => {
+      expect(useStore.getState().routeStatus).toBe('ready');
+    });
+    const state = useStore.getState();
+    expect(state.origin?.label).toBe('Penn Station');
+    expect(state.destination?.label).toBe('Rockefeller Center');
+    expect(state.departAt.getHours()).toBe(15);
+    expect(state.scrubAt.getTime()).toBe(state.departAt.getTime());
+  });
+
   test('does not search on every keystroke', async () => {
     const spy = vi.fn(mockFetch());
     vi.stubGlobal('fetch', spy);

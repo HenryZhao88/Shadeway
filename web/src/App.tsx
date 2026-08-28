@@ -62,10 +62,10 @@ export default function App() {
           </p>
         ) : null}
         <Hero />
-        <ThermalStrip />
         <RouteCompare />
-        <HeatProfile />
         <TurnList />
+        <ThermalStrip />
+        <HeatProfile />
         <RouteTimeseries />
         <DepartureCurve />
         <Weather />
