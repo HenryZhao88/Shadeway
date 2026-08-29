@@ -77,8 +77,8 @@ describe('heatRgb', () => {
   });
 
   test('every stop stays readable on the dark panel', () => {
-    // The panel is #161c24. A stop that sinks into it is invisible on the map.
-    const panel = luminance([22, 28, 36]);
+    // The panel is #17191c. A stop that sinks into it is invisible on the map.
+    const panel = luminance([23, 25, 28]);
     for (const stop of HEAT_STOPS) {
       expect(luminance(heatRgb(stop.c))).toBeGreaterThan(panel * 3);
     }

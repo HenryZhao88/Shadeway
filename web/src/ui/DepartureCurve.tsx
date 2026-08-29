@@ -204,7 +204,7 @@ export default function DepartureCurve() {
               x={geometry.x(bestIndex)}
               y={geometry.y(best.best_mean_feels_like_c)}
               label={clock(best.depart_iso)}
-              color="var(--sun)"
+              color="var(--accent)"
               emphasis
             />
           ) : null}

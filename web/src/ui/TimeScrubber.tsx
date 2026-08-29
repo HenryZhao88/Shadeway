@@ -236,7 +236,7 @@ export default function TimeScrubber() {
     <div className="scrub-inner">
       <div>
         <p className="eyebrow">leaving at</p>
-        <p className="scrub-clock" style={{ color: 'var(--sun)' }}>
+        <p className="scrub-clock" style={{ color: 'var(--accent)' }}>
           {clock(scrubAt)}
         </p>
       </div>
@@ -259,11 +259,11 @@ export default function TimeScrubber() {
             stroke="var(--rule)"
             strokeWidth="1"
           />
-          <path d={geometry.fill} fill="rgba(255, 217, 121, 0.10)" />
+          <path d={geometry.fill} fill="var(--accent-wash)" />
           <path
             d={geometry.line}
             fill="none"
-            stroke="rgba(255, 217, 121, 0.55)"
+            stroke="var(--accent-line)"
             strokeWidth="1.5"
           />
           {[6, 9, 12, 15, 18, 21].map((hour) => (

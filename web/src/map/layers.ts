@@ -34,9 +34,9 @@ const ALWAYS_ON_TOP = { depthCompare: 'always' as const, depthWriteEnabled: fals
 /** Buildings read as flat dark masses with a slightly lighter roof. Deliberate:
  *  an unlit prism cannot mislead anyone about where the sun is, and the shadow
  *  polygons are doing that job with real geometry. */
-const BUILDING_FILL: Rgba = [48, 59, 72, 248];
-const BUILDING_LINE: Rgba = [86, 103, 119, 215];
-const BUILDING_OVERVIEW_FILL: Rgba = [43, 53, 65, 238];
+const BUILDING_FILL: Rgba = [56, 59, 62, 248];
+const BUILDING_LINE: Rgba = [98, 102, 106, 215];
+const BUILDING_OVERVIEW_FILL: Rgba = [51, 54, 57, 238];
 
 /** Shade needs something to be darker THAN.
  *
@@ -203,7 +203,7 @@ export function routeLayers(
         id: 'route-casing',
         data,
         getPath: (d) => d.path,
-        getColor: [14, 19, 25, 235],
+        getColor: [15, 17, 19, 235],
         getWidth: ROUTE_WIDTH_CHOSEN + 4,
         widthUnits: 'pixels',
         capRounded: true,
@@ -249,11 +249,11 @@ export function endpointLayer(data: EndpointDatum[]) {
     getRadius: 7,
     radiusUnits: 'pixels',
     getFillColor: (d) =>
-      d.kind === 'origin' ? [255, 217, 121, 255] : [232, 237, 242, 255],
+      d.kind === 'origin' ? [201, 242, 77, 255] : [236, 238, 240, 255],
     stroked: true,
     lineWidthUnits: 'pixels',
     getLineWidth: 2.5,
-    getLineColor: [14, 19, 25, 255],
+    getLineColor: [15, 17, 19, 255],
     pickable: true,
     parameters: ALWAYS_ON_TOP,
   });
@@ -295,7 +295,7 @@ export function currentLocationLayers(location: CurrentLocationDatum | null) {
       stroked: true,
       lineWidthUnits: 'pixels',
       getLineWidth: 2.5,
-      getLineColor: [232, 237, 242, 255],
+      getLineColor: [236, 238, 240, 255],
       pickable: true,
       parameters: ALWAYS_ON_TOP,
     }),
@@ -338,7 +338,7 @@ export function waypointLayer(waypoints: WaypointSuggestion[]) {
     stroked: true,
     lineWidthUnits: 'pixels',
     getLineWidth: 2.5,
-    getLineColor: [14, 19, 25, 255],
+    getLineColor: [15, 17, 19, 255],
     pickable: true,
     parameters: ALWAYS_ON_TOP,
     updateTriggers: { getPosition: waypoints.length },

@@ -21,7 +21,7 @@ export const FALLBACK_STYLE: StyleSpecification = {
     {
       id: 'ground',
       type: 'background',
-      paint: { 'background-color': '#0e1319' },
+      paint: { 'background-color': '#0f1113' },
     },
   ],
   glyphs: undefined,
