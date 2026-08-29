@@ -120,6 +120,13 @@ export default function Endpoints() {
         });
       },
       (error) => {
+        // An error callback does not end the watch — the spec lets it keep
+        // firing. Clearing the id without clearing the watch left it
+        // registered for the life of the page, and put it beyond the reach of
+        // the unmount cleanup, which only clears a non-null id.
+        if (watchId.current !== null && navigator.geolocation) {
+          navigator.geolocation.clearWatch(watchId.current);
+        }
         watchId.current = null;
         const denied = error.code === error.PERMISSION_DENIED;
         setLocationStatus(

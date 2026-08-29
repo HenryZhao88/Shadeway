@@ -25,6 +25,7 @@ import { clock, daylightWindow } from '../sun/position';
 import { temperatureName, temperatureUnit } from '../units';
 import type { DeparturePoint } from '../api/types';
 
+const NO_POINTS: DeparturePoint[] = [];
 const WIDTH = 340;
 const HEIGHT = 128;
 const PAD = { top: 16, right: 14, bottom: 22, left: 34 };
@@ -38,7 +39,9 @@ export default function DepartureCurve() {
   const [hover, setHover] = useState<number | null>(null);
   const [showTable, setShowTable] = useState(false);
 
-  const points = departure?.points ?? [];
+  // A fresh [] on every render defeated both memos below, so the curve was
+  // re-laid-out and sunset re-solved on every unrelated store change.
+  const points = departure?.points ?? NO_POINTS;
   const geometry = useMemo(() => layout(points), [points]);
   const sunset = useMemo(() => {
     if (!points.length) return null;

@@ -277,6 +277,9 @@ function pick(url: string, overrides: Record<string, unknown>): unknown {
       attribution: '© OpenStreetMap contributors',
     };
   }
+  if (url.includes('/scene/plant')) {
+    return { planted: 1, invalidated_samples: 12, scene_version: 2 };
+  }
   if (url.includes('/departure-curve')) return DEPARTURE_CURVE;
   if (url.includes('/timeseries')) return TIMESERIES;
   if (url.includes('/route')) return ROUTE_RESPONSE;

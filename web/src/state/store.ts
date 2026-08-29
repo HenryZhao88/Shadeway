@@ -193,6 +193,8 @@ function initialDeparture(): Date {
   return now;
 }
 
+const INITIAL_DEPARTURE = initialDeparture();
+
 function message(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
@@ -211,8 +213,13 @@ export const useStore = create<State>((set, get) => ({
   locationStatus: 'idle',
   locationError: null,
   locationFocus: 0,
-  scrubAt: initialDeparture(),
-  departAt: initialDeparture(),
+  // One reading of the clock, shared. Calling initialDeparture() twice meant
+  // two `new Date()` calls that could straddle a minute boundary, leaving
+  // scrubAt and departAt 60 s apart at boot — past commitDeparture's 30 s
+  // threshold, so the app opened with a re-routing spinner that never resolved
+  // until the reader touched the scrubber.
+  scrubAt: new Date(INITIAL_DEPARTURE),
+  departAt: new Date(INITIAL_DEPARTURE),
   profileKey: 'standard',
   walkSpeedMs: 1.35,
   unitSystem: 'imperial',
@@ -510,7 +517,7 @@ export const useStore = create<State>((set, get) => ({
         getAmenities(bbox, signal),
         buildingRequest,
       ]);
-      if (signal.aborted) return false;
+      if (signal.aborted) return true;
       set({
         amenities,
         buildings: buildings.buildings,
@@ -523,7 +530,12 @@ export const useStore = create<State>((set, get) => ({
       // happens if the caller remembers the bbox it just failed on. The most
       // likely failure is the very first load racing a server that is still
       // starting, and that map never repaints until someone pans.
-      if (aborted(error)) return false;
+      //
+      // An abort is not a failure: a newer viewport superseded this one and is
+      // already in flight. Reporting it as one made the caller count it against
+      // its retry budget. Both branches returned false, so the abort check
+      // above it was dead — this is what it was written to say.
+      if (aborted(error)) return true;
       return false;
     }
   },
@@ -566,7 +578,10 @@ export const useStore = create<State>((set, get) => ({
           invalidated: response.invalidated_samples,
         },
       }));
-      await get().fetchRoute();
+      // Only if there is a trip to re-run. Planting a tree before picking one
+      // used to fall into fetchRoute's "choose a destination" branch and put
+      // that in the planner's error slot, as though the planting had failed.
+      if (get().origin && get().destination) await get().fetchRoute();
     } catch (error) {
       if (aborted(error)) return;
       set({ routeError: message(error) });

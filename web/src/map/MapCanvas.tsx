@@ -164,25 +164,38 @@ export default function MapCanvas() {
     [fetchViewportData],
   );
 
+  // The camera, for the listeners below to read without being rebuilt around
+  // it. onViewStateChange already asks for data on every frame it moves.
+  const latestView = useRef(viewState);
+  latestView.current = viewState;
+
   // A camera that never moves still needs data after the window resizes: the
   // visible bbox grew, and nothing else would ask for the newly exposed blocks.
+  //
+  // Mounted once. With viewState in the dependency array this whole effect tore
+  // down and rebuilt on every frame of every pan — a listener swap and two
+  // timers per frame, plus a second call to requestViewportData alongside the
+  // one onViewStateChange was already making. The retry interval in particular
+  // was recreated faster than its own 2 s period, so it could never fire at
+  // all while anyone was touching the map.
   useEffect(() => {
-    requestViewportData(viewState);
-    const onResize = () => requestViewportData(viewState);
+    requestViewportData(latestView.current);
+    const onResize = () => requestViewportData(latestView.current);
     window.addEventListener('resize', onResize);
     // A slow-starting server is the common first-load failure. Retry a bounded
     // number of times; a permanent failure must not poll the endpoint forever.
     const retry = setInterval(() => {
       if (!lastBbox.current && retryCount.current < MAX_VIEW_RETRIES) {
-        requestViewportData(viewState);
+        requestViewportData(latestView.current);
       }
     }, 2000);
+    const settle = settleTimer;
     return () => {
       window.removeEventListener('resize', onResize);
       clearInterval(retry);
-      clearTimeout(settleTimer.current);
+      clearTimeout(settle.current);
     };
-  }, [requestViewportData, viewState]);
+  }, [requestViewportData]);
 
   const layers = useMemo(() => {
     const routes = route ? Object.values(route.routes) : [];
@@ -224,7 +237,6 @@ export default function MapCanvas() {
     amenities,
     budget.showShadows,
     bbox,
-    buildings,
     chosenId,
     currentLocation,
     destination,

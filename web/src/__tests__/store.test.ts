@@ -261,6 +261,73 @@ describe('the scrubber split', () => {
   });
 });
 
+describe('the departure the app opens on', () => {
+  test('scrubAt and departAt agree, so nothing is pending at boot', () => {
+    // These were two separate `new Date()` readings. Straddle a minute
+    // boundary between them and the app opened 60 s out of sync — past
+    // commitDeparture's 30 s threshold, so the scrubber showed a re-routing
+    // spinner that nothing would ever resolve.
+    expect(INITIAL.scrubAt.getTime()).toBe(INITIAL.departAt.getTime());
+  });
+
+  test('they are separate objects, so moving one cannot move the other', () => {
+    expect(INITIAL.scrubAt).not.toBe(INITIAL.departAt);
+  });
+});
+
+describe('planting', () => {
+  test('does not report a routing error when there is no trip yet', async () => {
+    useStore.setState({ origin: null, destination: null });
+
+    await useStore.getState().plant([{ lat: 40.758, lon: -73.9855 }]);
+
+    expect(useStore.getState().routeError).toBeNull();
+    expect(useStore.getState().plantedCount).toBeGreaterThan(0);
+  });
+
+  test('re-runs the route when there is one to re-run', async () => {
+    const spy = vi.fn(mockFetch());
+    vi.stubGlobal('fetch', spy);
+
+    await useStore.getState().plant([{ lat: 40.758, lon: -73.9855 }]);
+
+    expect(
+      spy.mock.calls.filter(([url]) => String(url).endsWith('/api/route')),
+    ).toHaveLength(1);
+  });
+});
+
+describe('viewport data', () => {
+  test('a superseded request is not reported as a failure', async () => {
+    // Every pan aborts the request before it. Counting those as failures spent
+    // the map's bounded first-load retry budget on ordinary interaction.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => {
+        const error = new Error('aborted');
+        error.name = 'AbortError';
+        return Promise.reject(error);
+      }),
+    );
+
+    const ok = await useStore
+      .getState()
+      .fetchViewportData([-74, 40.7, -73.9, 40.8]);
+
+    expect(ok).toBe(true);
+  });
+
+  test('a real failure still is one', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('boom'))));
+
+    const ok = await useStore
+      .getState()
+      .fetchViewportData([-74, 40.7, -73.9, 40.8]);
+
+    expect(ok).toBe(false);
+  });
+});
+
 describe('choosing a route', () => {
   test('follows the server heat-profile pick by default', async () => {
     await useStore.getState().fetchRoute();

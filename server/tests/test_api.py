@@ -342,6 +342,54 @@ def test_departure_curve_never_emits_bare_nan_json(client, monkeypatch):
     assert body["points"] == []
 
 
+def test_departure_curve_refuses_points_outside_the_map(client):
+    """/api/route already rejects these. The curve used to accept them, snap
+    both ends to whichever node was nearest the map edge, and return a full set
+    of points reading 0.0 C for a walk of zero length."""
+    response = client.get(
+        "/api/departure-curve",
+        params={
+            "origin_lat": 51.5, "origin_lon": -0.12,
+            "dest_lat": 51.51, "dest_lon": -0.13,
+            "from_iso": "2025-07-22T15:00:00-04:00",
+            "hours": 1,
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_departure_curve_refuses_a_walk_to_where_you_already_are(client):
+    from shadeway.api import _state
+
+    lon, lat = _state().graph.node_lonlat[0]
+    response = client.get(
+        "/api/departure-curve",
+        params={
+            "origin_lat": float(lat), "origin_lon": float(lon),
+            "dest_lat": float(lat), "dest_lon": float(lon),
+            "from_iso": "2025-07-22T15:00:00-04:00",
+            "hours": 1,
+        },
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "bbox",
+    ["nonsense", "1,2,3", "1,2,3,4,5", "", "a,b,c,d", "nan,2,3,4", "4,2,1,3"],
+)
+@pytest.mark.parametrize(
+    "path", ["/api/buildings", "/api/buildings.bin", "/api/amenities"]
+)
+def test_a_malformed_bbox_is_the_callers_mistake_not_a_server_error(
+    client, path, bbox
+):
+    """Every one of these used to reach float() unguarded and come back as a
+    500 with a traceback in the log."""
+    response = client.get(path, params={"bbox": bbox})
+    assert response.status_code == 422, f"{path}?bbox={bbox}"
+
+
 def test_buildings_endpoint_serves_the_occluders_the_router_uses(client):
     """The map and the routing must never disagree about what casts shade, so
     the client draws its shadows from this exact building set."""

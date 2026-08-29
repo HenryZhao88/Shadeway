@@ -577,8 +577,19 @@ def _departure_curve_locked(
     and numpy drops the GIL for the array maths. Processes would have to ship a
     75 MB cache to each worker and would lose more than they gained."""
     graph = state.graph
+    # The same two guards /api/route applies, for the same reason. Without them
+    # a pair of coordinates outside the city both snap to whichever node is
+    # nearest the map's edge, the search returns a zero-length walk, and the
+    # curve comes back as a full set of points reading 0.0 C and 0 s — a chart
+    # confidently describing a walk that does not exist.
+    if not graph.covers(origin_lon, origin_lat):
+        raise HTTPException(422, "starting point is outside the loaded map area")
+    if not graph.covers(dest_lon, dest_lat):
+        raise HTTPException(422, "destination is outside the loaded map area")
     origin = graph.nearest_node(origin_lon, origin_lat)
     destination = graph.nearest_node(dest_lon, dest_lat)
+    if origin == destination:
+        raise HTTPException(400, "origin and destination resolve to the same node")
     steps = hours * 4  # 15-minute resolution, per the spec
     departures = [from_iso + timedelta(minutes=15 * i) for i in range(steps)]
 
@@ -641,7 +652,7 @@ def geocode(
 def amenities(bbox: str) -> list[dict[str, object]]:
     """Pins for the current viewport. Served off the in-memory index rather
     than re-reading the parquet, because the map asks for this on every pan."""
-    west, south, east, north = (float(v) for v in bbox.split(","))
+    west, south, east, north = _parse_bbox(bbox)
     return [
         {"amenity_id": r["amenity_id"], "kind": r["kind"], "name": r["name"],
          "lat": r["lat"], "lon": r["lon"]}
@@ -668,7 +679,7 @@ def buildings(
     not part of the frozen route contract.
     """
     state = _state()
-    west, south, east, north = (float(v) for v in bbox.split(","))
+    west, south, east, north = _parse_bbox(bbox)
     (x0, x1), (y0, y1) = _ll_to_xy_box(west, south, east, north)
     box = shapely.box(x0, y0, x1, y1)
     hits = state.scene.building_tree.query(box)
@@ -818,7 +829,7 @@ def packed_buildings(bbox: str) -> Response:
     it never mistakes an incomplete skyline for complete geometry.
     """
     state = _state()
-    west, south, east, north = (float(v) for v in bbox.split(","))
+    west, south, east, north = _parse_bbox(bbox)
     (x0, x1), (y0, y1) = _ll_to_xy_box(west, south, east, north)
     hits = state.scene.building_tree.query(shapely.box(x0, y0, x1, y1))
     truncated = len(hits) > MAX_PACKED_BUILDINGS_PER_RESPONSE
@@ -833,6 +844,27 @@ def packed_buildings(bbox: str) -> Response:
             "cache-control": "public, max-age=300, stale-while-revalidate=60",
         },
     )
+
+
+def _parse_bbox(bbox: str) -> tuple[float, float, float, float]:
+    """west,south,east,north.
+
+    Anything else is the caller's mistake and should say so. Splitting this
+    inline meant a stray query string reached float() and came back as an
+    unhandled ValueError — a 500 and a traceback in the log for what is simply
+    a malformed request.
+    """
+    try:
+        west, south, east, north = (float(value) for value in bbox.split(","))
+    except ValueError:
+        raise HTTPException(
+            422, "bbox must be four comma-separated numbers: west,south,east,north"
+        ) from None
+    if not all(np.isfinite([west, south, east, north])):
+        raise HTTPException(422, "bbox values must be finite")
+    if west > east or south > north:
+        raise HTTPException(422, "bbox must be ordered west,south,east,north")
+    return west, south, east, north
 
 
 def _ll_to_xy_box(west: float, south: float, east: float, north: float):
