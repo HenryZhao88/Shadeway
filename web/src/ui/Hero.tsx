@@ -6,14 +6,14 @@
  * one place motion is spent.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { degrees, deltaDegrees, heatCategory, heatCss } from '../heat';
+import { prefersReducedMotion, SPRING } from '../motion/spring';
+import { useSpringValue } from '../motion/useSpringValue';
 import { chosenRouteId, useStore } from '../state/store';
 import { minutes } from '../sun/position';
 import { temperatureName, temperatureUnit } from '../units';
-
-const COUNT_MS = 620;
 
 export default function Hero() {
   const route = useStore((s) => s.route);
@@ -83,39 +83,40 @@ export default function Hero() {
   );
 }
 
-/** Counts from `from` to `to` once per route. Returns `to` immediately when the
- *  reader has asked for reduced motion, or when there is nothing to count
- *  from. */
+/** Counts from `from` to `to` once per route, on a spring rather than a clock.
+ *
+ *  The difference shows up when the reader picks the other option while the
+ *  count is still running: a keyframed count would restart from a number that
+ *  is no longer on screen, and jump. A spring is only ever told a new target,
+ *  so it carries its own velocity into the new direction and the digits stay
+ *  continuous. Critically damped — a temperature that overshot and came back
+ *  would be reading out a value that was never true.
+ */
 function useCountdown(from: number | null, to: number | null, key: number) {
-  const [value, setValue] = useState<number | null>(to);
-  const frame = useRef<number>(0);
+  const [value, spring] = useSpringValue(to ?? 0, SPRING.readout);
+  const seen = useRef<number | null>(null);
 
   useEffect(() => {
-    if (to == null) {
-      setValue(null);
-      return undefined;
-    }
-    const reduced =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const start = from == null || Math.abs(from - to) < 1 ? to : from;
-    if (reduced || start === to) {
-      setValue(to);
-      return undefined;
-    }
+    if (to == null) return;
+    const fresh = key !== seen.current;
+    seen.current = key;
 
-    const began = performance.now();
-    const step = (now: number) => {
-      const t = Math.min(1, (now - began) / COUNT_MS);
-      // ease-out: the number decelerates into its final value
-      const eased = 1 - (1 - t) ** 3;
-      setValue(start + (to - start) * eased);
-      if (t < 1) frame.current = requestAnimationFrame(step);
-    };
-    frame.current = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame.current);
-    // `key` is the route generation: re-run once per completed route
-  }, [from, to, key]);
+    if (!fresh) {
+      // Same route, different option chosen. Re-aim from wherever it is.
+      spring.to(to);
+      return;
+    }
+    // A new route. Start the number at what the fast way would have felt like
+    // and let it fall — that one motion is the product's whole argument.
+    const worthCounting =
+      from != null && Math.abs(from - to) >= 1 && !prefersReducedMotion();
+    if (worthCounting) {
+      spring.set(from);
+      spring.to(to);
+    } else {
+      spring.set(to);
+    }
+  }, [from, to, key, spring]);
 
-  return value;
+  return to == null ? null : value;
 }

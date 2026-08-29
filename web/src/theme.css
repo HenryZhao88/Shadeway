@@ -89,6 +89,9 @@ body {
   font-size: 14px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  /* Let the system face use its own optical sizes: the 88px hero and the 10px
+     eyebrow are drawn from different masters, not from one scaled outline. */
+  font-optical-sizing: auto;
   overflow: hidden;
 }
 
@@ -123,31 +126,28 @@ button {
   border-radius: 2px;
 }
 
+/* The only range input in the interface is the scrubber's, and it is no longer
+ * the handle — see ui/TimeScrubber.tsx. It stays in the layout because it is
+ * what arrow keys and screen readers talk to; it is invisible and inert to the
+ * pointer because .scrub-handle is what the eye and the finger get. */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   background: none;
-  cursor: grab;
-}
-input[type="range"]:active {
-  cursor: grabbing;
+  pointer-events: none;
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 3px;
-  height: 44px;
-  border-radius: 1px;
-  background: var(--sun);
-  box-shadow: 0 0 0 1px var(--ground), 0 0 18px rgba(255, 217, 121, 0.55);
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
 input[type="range"]::-moz-range-thumb {
-  width: 3px;
-  height: 44px;
-  border: none;
-  border-radius: 1px;
-  background: var(--sun);
-  box-shadow: 0 0 0 1px var(--ground), 0 0 18px rgba(255, 217, 121, 0.55);
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0;
 }
 
 ::selection {
@@ -586,6 +586,9 @@ input[type="range"]::-moz-range-thumb {
   font-stretch: 112%;
   font-size: 26px;
   line-height: 1;
+  /* Tracking is a function of size, never a constant. At 26px the digits read
+     too far apart at 0, the way the 88px hero does at -0.01em. */
+  letter-spacing: -0.015em;
   font-variant-numeric: tabular-nums;
 }
 .option-mark {
@@ -797,6 +800,67 @@ input[type="range"]::-moz-range-thumb {
 .scrub-track {
   position: relative;
   height: 52px;
+  /* The browser must not claim a vertical drag for a scroll: this control owns
+     the pointer for the whole gesture, from press to release. */
+  touch-action: none;
+  cursor: grab;
+  /* Nothing here is text to be selected, and a drag that highlights the hour
+     labels on its way past is a drag that got away from you. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.scrub-track[data-grabbing] {
+  cursor: grabbing;
+}
+/* The keyboard's focus ring is drawn by the range input, which is invisible but
+   exactly the size of the track — so it already lands where the reader is
+   looking, and the handle does not need one of its own. */
+
+/* A zero-width anchor: `left` is the time, `transform` is the rubber-band give
+   at the ends of the day, and the two never fight over the same property. */
+.scrub-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  will-change: transform;
+}
+.scrub-handle-stem {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1.5px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--sun);
+  box-shadow: 0 0 0 1px rgba(14, 19, 25, 0.9), 0 0 18px rgba(255, 217, 121, 0.55);
+  /* Feedback on the press, not on the release. 90 ms reads as caused by the
+     finger; anything longer reads as an animation about the finger. */
+  transition: width 90ms ease-out, left 90ms ease-out, box-shadow 90ms ease-out;
+}
+.scrub-track:hover .scrub-handle-stem {
+  box-shadow: 0 0 0 1px rgba(14, 19, 25, 0.9), 0 0 24px rgba(255, 217, 121, 0.72);
+}
+.scrub-track[data-grabbing] .scrub-handle-stem {
+  left: -2.5px;
+  width: 5px;
+  box-shadow: 0 0 0 1px rgba(14, 19, 25, 0.9), 0 0 28px rgba(255, 217, 121, 0.9);
+}
+/* The sun, riding the elevation curve at exactly this minute. The readout and
+   the thing it reads are one object, so there is nothing to correlate. */
+.scrub-handle-sun {
+  position: absolute;
+  left: -4.5px;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--sun);
+  box-shadow: 0 0 0 2px var(--panel), 0 0 14px rgba(255, 217, 121, 0.7);
+  transition: transform 90ms ease-out;
+}
+.scrub-track[data-grabbing] .scrub-handle-sun {
+  transform: scale(1.28);
 }
 .scrub-track svg {
   position: absolute;
@@ -832,8 +896,11 @@ input[type="range"]::-moz-range-thumb {
   border: 1px solid rgba(86, 103, 119, 0.82);
   border-radius: 12px;
   background: rgba(22, 28, 36, 0.96);
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(14px) saturate(125%);
+  /* The largest floating surface here, so the heaviest blur and the deepest
+     shadow — material weight is how the eye ranks the layers. The inset hairline
+     is the light catching the top edge of the glass. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 16px 42px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(20px) saturate(140%);
 }
 .planner-head {
   display: flex;
@@ -1012,6 +1079,11 @@ input[type="range"]::-moz-range-thumb {
   font-size: 9.5px;
 }
 .search-results {
+  /* Anchored to the field above it, so the spatial relationship between what
+     was typed and what came back is not left to be inferred. Blur and scale
+     move together on the way in: a material arriving, not an image fading up. */
+  transform-origin: top center;
+  animation: material-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   max-height: 228px;
   margin-top: 8px;
   overflow-y: auto;
@@ -1019,6 +1091,17 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 8px;
   background: rgba(18, 24, 31, 0.99);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+@keyframes material-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985) translateY(-6px);
+    backdrop-filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .search-results ul {
   list-style: none;
@@ -1199,7 +1282,7 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 5px;
   background: rgba(14, 19, 25, 0.84);
   backdrop-filter: blur(10px) saturate(120%);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 22px rgba(0, 0, 0, 0.24);
 }
 .map-readout div {
   display: flex;
@@ -1224,7 +1307,7 @@ input[type="range"]::-moz-range-thumb {
   border-color: rgba(86, 103, 119, 0.78);
   background: rgba(14, 19, 25, 0.88);
   backdrop-filter: blur(10px) saturate(120%);
-  box-shadow: 0 7px 20px rgba(0, 0, 0, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 7px 20px rgba(0, 0, 0, 0.24);
 }
 .map-tools .ghost-button:hover:not(:disabled) {
   border-color: var(--sun);
@@ -1267,7 +1350,7 @@ input[type="range"]::-moz-range-thumb {
   border-left: 2px solid var(--sun);
   border-radius: 0 4px 4px 0;
   background: rgba(14, 19, 25, 0.82);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.23);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 22px rgba(0, 0, 0, 0.23);
   backdrop-filter: blur(10px) saturate(120%);
 }
 .app.planning .map-context {
@@ -1338,6 +1421,112 @@ input[type="range"]::-moz-range-thumb {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* -------------------------------------------------- feedback on the press
+ *
+ * Every control below answered a hover and answered a completed action, which
+ * on a touch screen means it did not answer at all until the work was done.
+ * Feedback belongs on the pointer going *down*: the moment latency shows up
+ * between the finger and the interface, directness falls off a cliff.
+ *
+ * The scale is 2%. Large enough to be felt, small enough that nobody would
+ * describe it as an animation. */
+
+.chip,
+.option,
+.ghost-button,
+.route-button,
+.field-map-button,
+.field-search-button,
+.planner-swap,
+.location-button,
+.unit-toggle button {
+  transition-property: background, color, border-color, box-shadow, transform,
+    filter;
+  transition-duration: 140ms;
+  transition-timing-function: ease-out;
+}
+
+.chip:active,
+.option:active,
+.ghost-button:active:not(:disabled),
+.route-button:active:not(:disabled),
+.field-search-button:active:not(:disabled),
+.planner-swap:active,
+.location-button:active,
+.unit-toggle button:active {
+  transform: scale(0.978);
+  transition-duration: 80ms;
+}
+/* A 26px square wants a deeper press than a 340px card: the same 2% would be
+   half a pixel and read as nothing at all. */
+.field-map-button:active {
+  transform: scale(0.9);
+  transition-duration: 80ms;
+}
+/* Rows in a hairline grid cannot scale — the press would open a gap between a
+   row and its neighbours. They brighten in place instead. */
+.turn:active,
+.search-results li button:active {
+  background: var(--panel-3);
+  filter: brightness(1.09);
+}
+.map-tools .ghost-button:active:not(:disabled) {
+  transform: translateY(-1px) scale(0.97);
+}
+
+/* --------------------------------------------------- the other two settings
+ *
+ * Reduced motion was already answered below. These are its siblings, and a
+ * translucent interface that ignores them is unreadable for the people who set
+ * them: raise the opacity and drop the blur rather than dimming the text. */
+
+@media (prefers-reduced-transparency: reduce) {
+  .route-planner,
+  .map-readout,
+  .map-context,
+  .map-hint,
+  .map-tools .ghost-button,
+  .search-results {
+    backdrop-filter: none;
+  }
+  .route-planner {
+    background: var(--panel);
+  }
+  .map-readout,
+  .map-context,
+  .map-hint,
+  .search-results {
+    background: var(--ground);
+  }
+  .map-tools .ghost-button {
+    background: var(--panel);
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --ink-2: #c8d3de;
+    --ink-3: #a3b1be;
+    --rule: #4c5b68;
+    --rule-bright: #71818f;
+  }
+  .route-planner,
+  .map-readout,
+  .map-context,
+  .map-hint,
+  .map-tools .ghost-button,
+  .search-results {
+    backdrop-filter: none;
+    background: #080c11;
+    border: 1px solid var(--rule-bright);
+  }
+  .hint,
+  .field-hint,
+  .sample-note {
+    color: var(--ink-2);
+  }
 }
 
 /* ------------------------------------------------------------ responsive */
