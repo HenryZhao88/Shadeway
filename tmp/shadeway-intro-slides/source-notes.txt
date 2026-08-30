@@ -1,0 +1,7 @@
+Slide 1
+- Hero image: generated with OpenAI image generation on 2026-08-30. No external asset used.
+- Hackathon framing: https://hacksocial2026.devpost.com/ (read 2026-08-30).
+
+Slide 2
+- Product capabilities: Shadeway repository README.md and web/src/ui components, reviewed 2026-08-30.
+- Illustrative route values in the slide are a product-story visualization, not a claim about a live route at a particular time.

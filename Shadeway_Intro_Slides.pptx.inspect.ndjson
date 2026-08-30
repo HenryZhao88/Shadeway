@@ -1,0 +1,72 @@
+{"kind":"deck","id":"pr/v576in","name":"Deck"}
+{"kind":"layout","layoutId":"6a2611e9-14f0-4c95-b152-755a1163b1eb","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"72fe3776-23cb-4d6e-9e84-7ce9132958dd","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/jwdvtx","slide":1,"title":"SHADEWAY  |  HEAT-AWARE WALKING","textShapes":8}
+{"kind":"shape","id":"sh/mh0jutob","slide":1,"bbox":[485,0,795,720]}
+{"kind":"shape","id":"sh/7i9knepw","slide":1,"bbox":[0,0,592,720]}
+{"kind":"shape","id":"sh/wn21036d","slide":1,"bbox":[525,0,180,720]}
+{"kind":"shape","id":"sh/hob2t87y","slide":1,"bbox":[64,67,56,4]}
+{"kind":"textbox","id":"sh/ulkjyto7","slide":1,"name":"s1-kicker","text":"SHADEWAY  |  HEAT-AWARE WALKING","textPreview":"SHADEWAY  |  HEAT-AWARE WALKING","textChars":31,"textLines":1,"bbox":[64,87,430,28]}
+{"kind":"textbox","id":"sh/vmtkryps","slide":1,"name":"s1-title","text":"A fast route is not always\nthe easiest walk.","textPreview":"A fast route is not always | the easiest walk.","textChars":44,"textLines":2,"bbox":[64,136,500,164]}
+{"kind":"textbox","id":"sh/4bm14369","slide":1,"name":"s1-subtitle","text":"Direct sun can turn a short city walk into the hardest part of someone’s day. Most maps only optimize for minutes.","textPreview":"Direct sun can turn a short city walk into the hardest part of someone’s day. Most maps only optimize for minutes.","textChars":114,"textLines":1,"bbox":[64,326,445,92]}
+{"kind":"shape","id":"sh/5cv2x87u","slide":1,"bbox":[64,462,430,1]}
+{"kind":"textbox","id":"sh/hkjehc3u","slide":1,"name":"s1-need-label","text":"WHAT PEOPLE ACTUALLY NEED","textPreview":"WHAT PEOPLE ACTUALLY NEED","textChars":25,"textLines":1,"bbox":[64,486,390,22]}
+{"kind":"textbox","id":"sh/gjado7m9","slide":1,"name":"s1-need-copy","text":"Which route feels better?\nWhich side stays cooler?\nShould I leave later?","textPreview":"Which route feels better? | Which side stays cooler? | Should I leave later?","textChars":72,"textLines":3,"bbox":[64,521,410,110]}
+{"kind":"textbox","id":"sh/vi1cf2lo","slide":1,"name":"s1-page","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[64,657,60,22]}
+{"kind":"textbox","id":"sh/uhsvmh43","slide":1,"name":"s1-footer","text":"Heat changes the route","textPreview":"Heat changes the route","textChars":22,"textLines":1,"bbox":[104,657,250,22]}
+{"kind":"shape","id":"sh/p83elw3q","slide":1,"bbox":[940,568,260,80]}
+{"kind":"textbox","id":"sh/47udsr25","slide":1,"name":"s1-image-caption","text":"Same city.\nA different walk.","textPreview":"Same city. | A different walk.","textChars":28,"textLines":2,"bbox":[964,585,205,50]}
+{"kind":"image","id":"im/sbyhczm5","slide":1,"name":"","alt":"Midtown sidewalk divided between strong sun and building shade","bbox":[520,0,760,720]}
+{"kind":"notes","id":"nt/jwdvtx","slide":1,"text":"[Sources]\n- Hero image: generated with OpenAI image generation on 2026-08-30.\n- Hackathon framing: https://hacksocial2026.devpost.com/ (read 2026-08-30)."}
+{"kind":"slide","id":"sl/17nmvs","slide":2,"title":"SHADEWAY  |  WHAT WE BUILT","textShapes":25}
+{"kind":"shape","id":"sh/4fm50fmt","slide":2,"bbox":[64,62,56,4]}
+{"kind":"textbox","id":"sh/3edo7a5o","slide":2,"name":"s2-kicker","text":"SHADEWAY  |  WHAT WE BUILT","textPreview":"SHADEWAY  |  WHAT WE BUILT","textChars":26,"textLines":1,"bbox":[64,82,400,25]}
+{"kind":"textbox","id":"sh/2t4nyp43","slide":2,"name":"s2-title","text":"A walking planner\nfor how the walk feels.","textPreview":"A walking planner | for how the walk feels.","textChars":41,"textLines":2,"bbox":[64,128,530,143]}
+{"kind":"textbox","id":"sh/hsv65kni","slide":2,"name":"s2-subtitle","text":"Shadeway turns invisible heat exposure into practical choices before you leave.","textPreview":"Shadeway turns invisible heat exposure into practical choices before you leave.","textChars":79,"textLines":1,"bbox":[64,290,470,61]}
+{"kind":"textbox","id":"sh/grm5wfmx","slide":2,"name":"s2-num-0","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[64,397,52,22]}
+{"kind":"textbox","id":"sh/vqto3a5c","slide":2,"name":"s2-head-0","text":"Cooler route choices","textPreview":"Cooler route choices","textChars":20,"textLines":1,"bbox":[118,394,270,26]}
+{"kind":"textbox","id":"sh/upknu54r","slide":2,"name":"s2-body-0","text":"Compare the fastest walk with options that feel cooler.","textPreview":"Compare the fastest walk with options that feel cooler.","textChars":55,"textLines":1,"bbox":[118,421,350,46]}
+{"kind":"textbox","id":"sh/tob610n6","slide":2,"name":"s2-num-1","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[64,468,52,22]}
+{"kind":"textbox","id":"sh/8n25svm1","slide":2,"name":"s2-head-1","text":"The sun moves with you","textPreview":"The sun moves with you","textChars":22,"textLines":1,"bbox":[118,465,270,26]}
+{"kind":"textbox","id":"sh/e10761wz","slide":2,"name":"s2-body-1","text":"Each block is checked when the walker actually reaches it.","textPreview":"Each block is checked when the walker actually reaches it.","textChars":58,"textLines":1,"bbox":[118,492,350,46]}
+{"kind":"textbox","id":"sh/z298f6xk","slide":2,"name":"s2-num-2","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[64,539,52,22]}
+{"kind":"textbox","id":"sh/03ip8be5","slide":2,"name":"s2-head-2","text":"Practical guidance","textPreview":"Practical guidance","textChars":18,"textLines":1,"bbox":[118,536,270,26]}
+{"kind":"textbox","id":"sh/14rqhgfq","slide":2,"name":"s2-body-2","text":"Choose a side of the street, a better time, or a place to cool off.","textPreview":"Choose a side of the street, a better time, or a place to cool off.","textChars":67,"textLines":1,"bbox":[118,563,350,46]}
+{"kind":"textbox","id":"sh/qxg721w3","slide":2,"name":"s2-page","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[64,657,60,22]}
+{"kind":"textbox","id":"sh/ry98b6xo","slide":2,"name":"s2-footer","text":"A route people can act on","textPreview":"A route people can act on","textChars":25,"textLines":1,"bbox":[104,657,310,22]}
+{"kind":"shape","id":"sh/czip4ret","slide":2,"name":"s2-product-frame","bbox":[625,62,591,594]}
+{"kind":"shape","id":"sh/d0rqdwfe","slide":2,"name":"s2-product-header","bbox":[625,62,591,52]}
+{"kind":"shape","id":"sh/29g7yhwr","slide":2,"bbox":[625,88,591,26]}
+{"kind":"textbox","id":"sh/3ap87mxc","slide":2,"name":"s2-product-brand","text":"shadeway","textPreview":"shadeway","textChars":8,"textLines":1,"bbox":[653,77,160,22]}
+{"kind":"shape","id":"sh/7el4zid4","slide":2,"bbox":[1142,80,10,10]}
+{"kind":"shape","id":"sh/6dcn6dcj","slide":2,"bbox":[1162,80,10,10]}
+{"kind":"shape","id":"sh/tgnm1sva","slide":2,"bbox":[1182,80,10,10]}
+{"kind":"textbox","id":"sh/sfe58nup","slide":2,"name":"s2-route-label","text":"PENN STATION  →  ROCKEFELLER CENTER","textPreview":"PENN STATION  →  ROCKEFELLER CENTER","textChars":35,"textLines":1,"bbox":[653,135,470,18]}
+{"kind":"textbox","id":"sh/f25o32d0","slide":2,"name":"s2-route-title","text":"One extra minute.\nA meaningfully cooler walk.","textPreview":"One extra minute. | A meaningfully cooler walk.","textChars":45,"textLines":2,"bbox":[653,163,420,70]}
+{"kind":"shape","id":"sh/u1wnaxcv","slide":2,"bbox":[653,264,307,113]}
+{"kind":"shape","id":"sh/h4n65sv6","slide":2,"bbox":[674,282,252,2]}
+{"kind":"shape","id":"sh/g3e5c7ul","slide":2,"bbox":[674,305,252,2]}
+{"kind":"shape","id":"sh/b614rydw","slide":2,"bbox":[674,328,252,2]}
+{"kind":"shape","id":"sh/a5snytcb","slide":2,"bbox":[674,351,252,2]}
+{"kind":"shape","id":"sh/0bq18za9","slide":2,"bbox":[700,275,2,90]}
+{"kind":"shape","id":"sh/1cz214bu","slide":2,"bbox":[745,275,2,90]}
+{"kind":"shape","id":"sh/ep8j6ps3","slide":2,"bbox":[790,275,2,90]}
+{"kind":"shape","id":"sh/zqhkzuto","slide":2,"bbox":[835,275,2,90]}
+{"kind":"shape","id":"sh/cn614zad","slide":2,"bbox":[880,275,2,90]}
+{"kind":"shape","id":"sh/doz2xkbi","slide":2,"bbox":[690,344,61,6]}
+{"kind":"shape","id":"sh/qloj2ps7","slide":2,"bbox":[746,321,48,6]}
+{"kind":"shape","id":"sh/rmxkvuts","slide":2,"bbox":[788,297,60,6]}
+{"kind":"shape","id":"sh/wjalgjah","slide":2,"bbox":[843,275,69,6]}
+{"kind":"shape","id":"sh/xkj29ob2","slide":2,"bbox":[681,340,15,15]}
+{"kind":"shape","id":"sh/toby1gre","slide":2,"bbox":[906,268,15,15]}
+{"kind":"textbox","id":"sh/sn2h8bqt","slide":2,"name":"s2-map-start","text":"start","textPreview":"start","textChars":5,"textLines":1,"bbox":[665,356,45,14]}
+{"kind":"textbox","id":"sh/7mtgz698","slide":2,"name":"s2-map-finish","text":"finish","textPreview":"finish","textChars":6,"textLines":1,"bbox":[891,285,46,14]}
+{"kind":"shape","id":"sh/6lkz618n","slide":2,"bbox":[982,264,196,113]}
+{"kind":"textbox","id":"sh/hsvi50ra","slide":2,"name":"s2-feels-label","text":"FEELS LIKE","textPreview":"FEELS LIKE","textChars":10,"textLines":1,"bbox":[1002,282,130,16]}
+{"kind":"textbox","id":"sh/grmhcvq5","slide":2,"name":"s2-fastest","text":"fastest  41°","textPreview":"fastest  41°","textChars":12,"textLines":1,"bbox":[1002,304,150,23]}
+{"kind":"textbox","id":"sh/fqdg3q9k","slide":2,"name":"s2-shadeway","text":"shadeway  33°","textPreview":"shadeway  33°","textChars":13,"textLines":1,"bbox":[1002,331,160,28]}
+{"kind":"textbox","id":"sh/up4zal8z","slide":2,"name":"s2-chart-label","text":"WHEN TO LEAVE","textPreview":"WHEN TO LEAVE","textChars":13,"textLines":1,"bbox":[653,410,145,18]}
+{"kind":"textbox","id":"sh/pwfi90rm","slide":2,"name":"s2-chart-caption","text":"A later departure can feel cooler, even before sunset.","textPreview":"A later departure can feel cooler, even before sunset.","textChars":54,"textLines":1,"bbox":[653,433,430,23]}
+{"kind":"textbox","id":"sh/2pwnetk7","slide":2,"name":"s2-disclaimer","text":"Illustrative product view. Route conditions update with time and local weather.","textPreview":"Illustrative product view. Route conditions update with time and local weather.","textChars":79,"textLines":1,"bbox":[653,612,500,16]}
+{"kind":"chart","id":"ch/g7ytofed","slide":2,"name":"","chartType":"line","bbox":[650,466,503,126]}
+{"kind":"notes","id":"nt/17nmvs","slide":2,"text":"[Sources]\n- Product capabilities: Shadeway repository README.md and web/src/ui components, reviewed 2026-08-30.\n- Illustrative route values are a product-story visualization, not a claim about a live route at a particular time.\n- Hackathon framing: https://hacksocial2026.devpost.com/ (read 2026-08-30)."}

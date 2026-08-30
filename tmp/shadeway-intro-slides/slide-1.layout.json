@@ -1,0 +1,797 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/jwdvtx",
+    "id": "jwdvtx",
+    "slide": 1,
+    "layoutId": "72fe3776-23cb-4d6e-9e84-7ce9132958dd",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "6a2611e9-14f0-4c95-b152-755a1163b1eb",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#0A1017",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "+mn-lt"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "72fe3776-23cb-4d6e-9e84-7ce9132958dd",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "6a2611e9-14f0-4c95-b152-755a1163b1eb",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "6a2611e9-14f0-4c95-b152-755a1163b1eb",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/sbyhczm5",
+      "id": "1",
+      "bbox": [
+        520,
+        0,
+        760,
+        720
+      ],
+      "alt": "Midtown sidewalk divided between strong sun and building shade",
+      "contentType": "image/png",
+      "imageFit": "cover",
+      "asset": {
+        "assetId": "32a8adf7-21cc-4259-b393-64b163431a14",
+        "contentType": "image/png",
+        "byteLength": 2277847
+      }
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/mh0jutob",
+      "id": "2",
+      "bbox": [
+        485,
+        0,
+        795,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "rgba(8, 13, 19, 0.4)",
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7i9knepw",
+      "id": "3",
+      "bbox": [
+        0,
+        0,
+        592,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#0A1017",
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wn21036d",
+      "id": "4",
+      "bbox": [
+        525,
+        0,
+        180,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "rgba(10, 16, 23, 0.5)",
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hob2t87y",
+      "id": "5",
+      "bbox": [
+        64,
+        67,
+        56,
+        4
+      ],
+      "geometry": "rect",
+      "fillColor": "#F1B54A",
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ulkjyto7",
+      "id": "6",
+      "name": "s1-kicker",
+      "bbox": [
+        64,
+        87,
+        430,
+        28
+      ],
+      "geometry": "rect",
+      "text": "SHADEWAY  |  HEAT-AWARE WALKING",
+      "textPreview": "SHADEWAY  |  HEAT-AWARE WALKING",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "fontSize": 14,
+        "typeface": "+mn-lt",
+        "color": "#76C8E4",
+        "bold": true,
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "SHADEWAY  |  HEAT-AWARE WALKING"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "SHADEWAY  |  HEAT-AWARE WALKING",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "color": "#76C8E4",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "SHADEWAY  |  HEAT-AWARE WALKING",
+              "fontSize": 14,
+              "color": "#76C8E4",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vmtkryps",
+      "id": "7",
+      "name": "s1-title",
+      "bbox": [
+        64,
+        136,
+        500,
+        164
+      ],
+      "geometry": "rect",
+      "text": "A fast route is not always\nthe easiest walk.",
+      "textPreview": "A fast route is not always | the easiest walk.",
+      "resolvedFontSize": 53,
+      "resolvedTextStyle": {
+        "fontSize": 53,
+        "typeface": "+mn-lt",
+        "color": "#F7F8F6",
+        "bold": true,
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A fast route is not"
+          },
+          {
+            "index": 2,
+            "text": "always"
+          },
+          {
+            "index": 3,
+            "text": "the easiest walk."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A fast route is not always",
+          "resolvedTextStyle": {
+            "fontSize": 53,
+            "color": "#F7F8F6",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A fast route is not always",
+              "fontSize": 53,
+              "color": "#F7F8F6",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "the easiest walk.",
+          "resolvedTextStyle": {
+            "fontSize": 53,
+            "color": "#F7F8F6",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "the easiest walk.",
+              "fontSize": 53,
+              "color": "#F7F8F6",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4bm14369",
+      "id": "8",
+      "name": "s1-subtitle",
+      "bbox": [
+        64,
+        326,
+        445,
+        92
+      ],
+      "geometry": "rect",
+      "text": "Direct sun can turn a short city walk into the hardest part of someone’s day. Most maps only optimize for minutes.",
+      "textPreview": "Direct sun can turn a short city walk into the hardest part of someone’s day. Most maps only optimize for minutes.",
+      "resolvedFontSize": 22,
+      "resolvedTextStyle": {
+        "fontSize": 22,
+        "typeface": "+mn-lt",
+        "color": "#C9D5D7",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Direct sun can turn a short city walk into"
+          },
+          {
+            "index": 2,
+            "text": "the hardest part of someone’s day. Most"
+          },
+          {
+            "index": 3,
+            "text": "maps only optimize for minutes."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Direct sun can turn a short city walk into the hardest part of someone’s day. Most maps only optimize for minutes.",
+          "resolvedTextStyle": {
+            "fontSize": 22,
+            "color": "#C9D5D7",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Direct sun can turn a short city walk into the hardest part of someone’s day. Most maps only optimize for minutes.",
+              "fontSize": 22,
+              "color": "#C9D5D7",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5cv2x87u",
+      "id": "9",
+      "bbox": [
+        64,
+        462,
+        430,
+        1
+      ],
+      "geometry": "rect",
+      "fillColor": "#43525C",
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hkjehc3u",
+      "id": "10",
+      "name": "s1-need-label",
+      "bbox": [
+        64,
+        486,
+        390,
+        22
+      ],
+      "geometry": "rect",
+      "text": "WHAT PEOPLE ACTUALLY NEED",
+      "textPreview": "WHAT PEOPLE ACTUALLY NEED",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "fontSize": 13,
+        "typeface": "+mn-lt",
+        "color": "#76C8E4",
+        "bold": true,
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "WHAT PEOPLE ACTUALLY NEED"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "WHAT PEOPLE ACTUALLY NEED",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "color": "#76C8E4",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "WHAT PEOPLE ACTUALLY NEED",
+              "fontSize": 13,
+              "color": "#76C8E4",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gjado7m9",
+      "id": "11",
+      "name": "s1-need-copy",
+      "bbox": [
+        64,
+        521,
+        410,
+        110
+      ],
+      "geometry": "rect",
+      "text": "Which route feels better?\nWhich side stays cooler?\nShould I leave later?",
+      "textPreview": "Which route feels better? | Which side stays cooler? | Should I leave later?",
+      "resolvedFontSize": 22,
+      "resolvedTextStyle": {
+        "fontSize": 22,
+        "typeface": "+mn-lt",
+        "color": "#F7F8F6",
+        "bold": true,
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Which route feels better?"
+          },
+          {
+            "index": 2,
+            "text": "Which side stays cooler?"
+          },
+          {
+            "index": 3,
+            "text": "Should I leave later?"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Which route feels better?",
+          "resolvedTextStyle": {
+            "fontSize": 22,
+            "color": "#F7F8F6",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Which route feels better?",
+              "fontSize": 22,
+              "color": "#F7F8F6",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "Which side stays cooler?",
+          "resolvedTextStyle": {
+            "fontSize": 22,
+            "color": "#F7F8F6",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Which side stays cooler?",
+              "fontSize": 22,
+              "color": "#F7F8F6",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 3,
+          "text": "Should I leave later?",
+          "resolvedTextStyle": {
+            "fontSize": 22,
+            "color": "#F7F8F6",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Should I leave later?",
+              "fontSize": 22,
+              "color": "#F7F8F6",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vi1cf2lo",
+      "id": "12",
+      "name": "s1-page",
+      "bbox": [
+        64,
+        657,
+        60,
+        22
+      ],
+      "geometry": "rect",
+      "text": "01",
+      "textPreview": "01",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "fontSize": 14,
+        "typeface": "+mn-lt",
+        "color": "#80929A",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "01"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "01",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "color": "#80929A",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "01",
+              "fontSize": 14,
+              "color": "#80929A",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/uhsvmh43",
+      "id": "13",
+      "name": "s1-footer",
+      "bbox": [
+        104,
+        657,
+        250,
+        22
+      ],
+      "geometry": "rect",
+      "text": "Heat changes the route",
+      "textPreview": "Heat changes the route",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "fontSize": 14,
+        "typeface": "+mn-lt",
+        "color": "#80929A",
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Heat changes the route"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Heat changes the route",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "color": "#80929A",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Heat changes the route",
+              "fontSize": 14,
+              "color": "#80929A",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/p83elw3q",
+      "id": "14",
+      "bbox": [
+        940,
+        568,
+        260,
+        80
+      ],
+      "geometry": "roundRect",
+      "fillColor": "rgba(16, 26, 37, 0.84)",
+      "lineWidth": 0
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/47udsr25",
+      "id": "15",
+      "name": "s1-image-caption",
+      "bbox": [
+        964,
+        585,
+        205,
+        50
+      ],
+      "geometry": "rect",
+      "text": "Same city.\nA different walk.",
+      "textPreview": "Same city. | A different walk.",
+      "resolvedFontSize": 19,
+      "resolvedTextStyle": {
+        "fontSize": 19,
+        "typeface": "+mn-lt",
+        "color": "#F7F8F6",
+        "bold": true,
+        "alignment": "left",
+        "insets": {
+          "top": 4.8,
+          "right": 9.6,
+          "bottom": 4.8,
+          "left": 9.6
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Same city."
+          },
+          {
+            "index": 2,
+            "text": "A different walk."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Same city.",
+          "resolvedTextStyle": {
+            "fontSize": 19,
+            "color": "#F7F8F6",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Same city.",
+              "fontSize": 19,
+              "color": "#F7F8F6",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "A different walk.",
+          "resolvedTextStyle": {
+            "fontSize": 19,
+            "color": "#F7F8F6",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "A different walk.",
+              "fontSize": 19,
+              "color": "#F7F8F6",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}
