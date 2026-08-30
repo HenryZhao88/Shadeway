@@ -112,6 +112,12 @@ body,
   height: 100%;
   margin: 0;
 }
+#root {
+  /* On iOS a percentage height resolves against the LARGE viewport — the one
+     with the toolbar hidden — so the bottom row ends up underneath the
+     toolbar. dvh tracks the viewport that is actually visible. */
+  height: 100dvh;
+}
 
 body {
   background: var(--ground);
@@ -1342,7 +1348,10 @@ input[type="range"]::-moz-range-thumb {
   font-weight: 500;
 }
 .map-tools {
-  bottom: 12px;
+  /* Lifted by however much of the sheet is showing. The sheet writes its own
+     visible height onto the map area every frame, so these ride up and down
+     with it instead of being buried under it. */
+  bottom: calc(var(--sheet-visible, 0px) + 12px);
   right: 12px;
   display: flex;
   gap: 6px;
@@ -1376,7 +1385,7 @@ input[type="range"]::-moz-range-thumb {
   inset: -4px 4px;
 }
 .map-hint {
-  bottom: 12px;
+  bottom: calc(var(--sheet-visible, 0px) + 12px);
   left: 12px;
   font-size: 11px;
   color: var(--ink-3);
@@ -1387,7 +1396,7 @@ input[type="range"]::-moz-range-thumb {
   max-width: min(360px, calc(100vw - var(--rail) - 40px));
 }
 .map-context {
-  bottom: 12px;
+  bottom: calc(var(--sheet-visible, 0px) + 12px);
   left: 12px;
   display: grid;
   gap: 2px;
@@ -1577,21 +1586,153 @@ input[type="range"]::-moz-range-thumb {
   }
 }
 
+/* ------------------------------------------------------------- the sheet
+ *
+ * The phone layout. On a screen this size the map and its explanation cannot
+ * both hold a fixed share, because which one the reader wants changes second to
+ * second — so the map keeps the screen and everything else rides over it in a
+ * sheet, at whichever of three heights the reader last put it.
+ *
+ * Only ever built under the breakpoint: see ui/useCompactLayout.ts. */
+
+.sheet {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--rule);
+  border-radius: 18px 18px 0 0;
+  background: rgb(var(--panel-rgb) / 0.96);
+  backdrop-filter: blur(22px) saturate(140%);
+  /* The largest floating surface on a phone, so the heaviest blur and the
+     deepest shadow — and a lit top edge, because it is glass over a map. */
+  box-shadow: inset 0 1px 0 rgb(var(--ink-rgb) / 0.08),
+    0 -14px 42px rgb(0 0 0 / 0.5);
+  /* This element owns the pointer for the whole drag. The scroller below opts
+     back in, but only at the height where there is something to scroll. */
+  touch-action: none;
+  overscroll-behavior: contain;
+  will-change: transform;
+}
+
+.sheet-grip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  cursor: grab;
+}
+.sheet[data-dragging] .sheet-grip {
+  cursor: grabbing;
+}
+/* A real button, so the sheet opens from a keyboard and from a tap as well as
+   from a drag. The bar is drawn in ::before so the target can be finger-sized
+   without the handle looking it. */
+.sheet-grip-bar {
+  display: block;
+  padding: 11px 22px 9px;
+}
+.sheet-grip-bar::before {
+  content: "";
+  display: block;
+  width: 44px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--rule-bright);
+  transition: background 140ms ease-out;
+}
+.sheet-grip-bar:hover::before,
+.sheet[data-dragging] .sheet-grip-bar::before {
+  background: var(--ink-3);
+}
+
+.sheet-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Nothing scrolls until the sheet is all the way up: below that the content
+     is shorter than the gesture, and a scroller there would eat the drag. */
+  overflow: hidden;
+}
+.sheet[data-detent="full"] .sheet-scroll {
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Inside the sheet the planner is a section of a surface, not a card floating
+   on the map — the sheet is already the card. */
+.sheet .route-planner {
+  position: static;
+  width: auto;
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.planner-summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 3px 10px;
+  width: 100%;
+  padding: 2px 0 4px;
+  text-align: left;
+}
+.planner-summary-line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: 13px;
+}
+.planner-summary-line > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.planner-summary-line + .planner-summary-line {
+  color: var(--ink-2);
+}
+.planner-summary-chevron {
+  grid-row: 1 / 3;
+  justify-self: end;
+  width: 9px;
+  height: 9px;
+  border-right: 1.5px solid var(--ink-3);
+  border-bottom: 1.5px solid var(--ink-3);
+  transform: rotate(45deg);
+  transition: transform 160ms ease-out;
+}
+.planner-summary[aria-expanded="true"] .planner-summary-chevron {
+  transform: rotate(-135deg);
+}
+
 /* ------------------------------------------------------------ responsive */
 
 @media (max-width: 1000px) {
+  /* No rail row. Under this breakpoint the rail is not rendered at all — its
+     contents are in the sheet — so the map gets everything between the topbar
+     and the scrubber, and the sheet decides how much of it to cover.
+     The old three-region split gave the map 44vh, then let a planner card
+     cover three quarters of that, and squeezed eight sections of evidence into
+     whatever was left. */
   .app {
     grid-template-columns: 1fr;
-    grid-template-rows: 46px 44vh 1fr 78px;
+    grid-template-rows: 46px 1fr 78px;
     grid-template-areas:
       "topbar"
       "map"
-      "rail"
       "scrub";
-  }
-  .rail {
-    border-right: none;
-    border-top: 1px solid var(--rule);
   }
   .hero-degrees {
     font-size: 68px;
@@ -1607,12 +1748,12 @@ input[type="range"]::-moz-range-thumb {
   .map-hint {
     max-width: calc(100vw - 40px);
   }
-  .app.planning {
-    grid-template-rows: 46px 1fr 78px;
-    grid-template-areas:
-      "topbar"
-      "map"
-      "scrub";
+  /* The home indicator sits over the last 34 px of a modern iPhone. */
+  .scrubber {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .app {
+    grid-template-rows: 46px 1fr calc(78px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -1620,8 +1761,12 @@ input[type="range"]::-moz-range-thumb {
   .topbar {
     padding: 0 12px;
   }
+  /* Named, not matched by shape. `.topbar > .eyebrow` was meant to drop the
+     tagline, but .topbar-meta is also a direct child carrying .eyebrow — and at
+     (0,2,0) it beat that element's own display:flex, so every phone lost the
+     unit toggle, the clock and the connection status along with it. */
   .topbar-date,
-  .topbar > .eyebrow {
+  .topbar-tagline {
     display: none;
   }
   .topbar-meta {
@@ -1637,13 +1782,8 @@ input[type="range"]::-moz-range-thumb {
     right: 9px;
     bottom: 9px;
   }
-  .route-planner {
-    top: 9px;
-    left: 9px;
-    width: calc(100% - 18px);
-    padding: 13px;
-    border-radius: 10px;
-    max-height: calc(100% - 18px);
+  .sheet .route-planner {
+    padding: 2px 13px 13px;
   }
   .planner-head {
     margin-bottom: 9px;

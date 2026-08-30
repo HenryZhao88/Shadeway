@@ -38,6 +38,9 @@ export const SPRING = {
   move: { damping: 1, response: 0.4 },
   /** The landing after a throw — the one place overshoot is earned. */
   momentum: { damping: 0.82, response: 0.4 },
+  /** A drawer or sheet, per Apple's own table: quicker than a free throw,
+   *  because the reader is waiting to read what is on it. */
+  sheet: { damping: 0.8, response: 0.3 },
   /** A value counting itself into place, read rather than watched. */
   readout: { damping: 1, response: 0.55 },
 } satisfies Record<string, SpringConfig>;

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { searchPlaces, type GeocodeResult } from '../api/client';
 import { DEFAULT_DESTINATION, DEFAULT_ORIGIN, useStore } from '../state/store';
 import { formatAccuracy } from '../units';
+import { useCompactLayout } from './useCompactLayout';
 
 type EndpointKind = 'origin' | 'destination';
 type SearchStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -54,6 +55,8 @@ export default function Endpoints() {
   const locationStatus = useStore((s) => s.locationStatus);
   const locationError = useStore((s) => s.locationError);
   const pickMode = useStore((s) => s.pickMode);
+  const route = useStore((s) => s.route);
+  const routeGeneration = useStore((s) => s.routeGeneration);
   const routeStatus = useStore((s) => s.routeStatus);
   const routeError = useStore((s) => s.routeError);
   const setPickMode = useStore((s) => s.setPickMode);
@@ -67,12 +70,18 @@ export default function Endpoints() {
   const fetchRoute = useStore((s) => s.fetchRoute);
   const swapEnds = useStore((s) => s.swapEnds);
   const unitSystem = useStore((s) => s.unitSystem);
+  const compact = useCompactLayout();
+  const [unfolded, setUnfolded] = useState(false);
   const [draft, setDraft] = useState({ origin: '', destination: '' });
   const [activeSearch, setActiveSearch] = useState<EndpointKind | null>(null);
   const [searchStatus, setSearchStatus] = useState<SearchStatus>('idle');
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [attribution, setAttribution] = useState('');
+
+  useEffect(() => {
+    setUnfolded(false);
+  }, [routeGeneration]);
 
   useEffect(() => {
     setDraft((current) => ({ ...current, origin: origin?.label ?? '' }));
@@ -215,8 +224,43 @@ export default function Endpoints() {
   });
   const calculating = routeStatus === 'loading';
 
+  // On a phone the planner shares one sheet with the answer it produced, and
+  // at the sheet's lowest detent the answer is what the reader wants to see. So
+  // once a route exists the form folds down to the one line that says what trip
+  // it is, and unfolds again on a tap.
+  //
+  // The body is unmounted rather than hidden in CSS: every value it displays is
+  // state on THIS component, so nothing is lost, and a folded form is then
+  // genuinely out of the tab order and the accessibility tree rather than only
+  // out of sight once a stylesheet has loaded.
+  const foldable = compact && Boolean(route);
+  const folded = foldable && !unfolded;
+
   return (
-    <section className="route-planner" aria-label="Plan a walking route">
+    <section
+      className={`route-planner${folded ? ' is-folded' : ''}`}
+      aria-label="Plan a walking route"
+    >
+      {foldable ? (
+        <button
+          type="button"
+          className="planner-summary"
+          onClick={() => setUnfolded((open) => !open)}
+          aria-expanded={unfolded}
+        >
+          <span className="planner-summary-line">
+            <span className="field-dot is-location" aria-hidden="true" />
+            <span>{origin?.label ?? 'Starting point'}</span>
+          </span>
+          <span className="planner-summary-line">
+            <span className="field-dot is-destination" aria-hidden="true" />
+            <span>{destination?.label ?? 'Destination'}</span>
+          </span>
+          <span className="planner-summary-chevron" aria-hidden="true" />
+        </button>
+      ) : null}
+      {folded ? null : (
+      <div className="planner-body">
       <div className="planner-head">
         <div>
           <p className="eyebrow">walking directions</p>
@@ -350,6 +394,8 @@ export default function Endpoints() {
         </div>
         <small className="sample-note">The shade demo uses the next 3 PM sun.</small>
       </details>
+      </div>
+      )}
     </section>
   );
 }

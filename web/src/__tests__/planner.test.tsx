@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { useStore } from '../state/store';
 import Endpoints from '../ui/Endpoints';
-import { mockFetch } from './fixture';
+import { ROUTE_RESPONSE, mockFetch } from './fixture';
 
 const INITIAL = useStore.getState();
 let success: PositionCallback;
@@ -44,6 +44,64 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+});
+
+describe('on a phone, once a route exists', () => {
+  function compact(matches: boolean) {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({
+        matches,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
+    );
+  }
+
+  test('the form folds to the one line that names the trip', () => {
+    // The planner shares a sheet with the answer it produced, and at the
+    // sheet's lowest detent the answer is what the reader wants to see.
+    compact(true);
+    useStore.setState({
+      route: ROUTE_RESPONSE,
+      origin: { lat: 40.758, lon: -73.9855, label: 'Times Square' },
+      destination: { lat: 40.7527, lon: -73.9772, label: 'Grand Central' },
+    });
+
+    render(<Endpoints />);
+
+    expect(screen.getByText('Times Square')).toBeInTheDocument();
+    expect(screen.getByText('Grand Central')).toBeInTheDocument();
+    expect(screen.queryByText('Plan your route')).not.toBeInTheDocument();
+  });
+
+  test('a tap unfolds it again, and the form kept its place', async () => {
+    compact(true);
+    useStore.setState({
+      route: ROUTE_RESPONSE,
+      origin: { lat: 40.758, lon: -73.9855, label: 'Times Square' },
+      destination: { lat: 40.7527, lon: -73.9772, label: 'Grand Central' },
+    });
+    render(<Endpoints />);
+
+    await userEvent.click(screen.getByRole('button', { expanded: false }));
+
+    expect(screen.getByText('Plan your route')).toBeInTheDocument();
+    expect(screen.getByLabelText('Starting point')).toHaveValue('Times Square');
+  });
+
+  test('leaves the full form alone on a wide screen', () => {
+    compact(false);
+    useStore.setState({
+      route: ROUTE_RESPONSE,
+      origin: { lat: 40.758, lon: -73.9855, label: 'Times Square' },
+      destination: { lat: 40.7527, lon: -73.9772, label: 'Grand Central' },
+    });
+
+    render(<Endpoints />);
+
+    expect(screen.getByText('Plan your route')).toBeInTheDocument();
+  });
 });
 
 describe('route planner', () => {
