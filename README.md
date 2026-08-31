@@ -55,7 +55,7 @@ Checks:
 |---|---|
 | `pipeline/` | offline, never ships. NYC open data → `graph.parquet`, `scene.parquet`. |
 | `server/` | FastAPI. Ray casting, horizon cache, thermal model, bicriteria router. |
-| `web/` | React + MapLibre + deck.gl. Draws its own shadows, so the scrubber never waits. |
+| `web/` | React + MapLibre + deck.gl. Draws its own shadows, so the scrubber never waits. Rail beside the map on a desktop, a draggable sheet over it on a phone. |
 | `contracts/` | the three frozen shapes all of the above agree on. |
 
 Design notes: `shadeway_design.md`. Frozen interfaces: `docs/contracts.md`.
@@ -66,16 +66,13 @@ The physics, with citations and its stated limits: `docs/model.md`.
 
 ### Landed
 
-**It is deployed and reachable.** Oracle Cloud Always Free,
-`VM.Standard.A1.Flex`, 4 OCPU / 24 GB, Ubuntu 22.04 aarch64, running as a
-systemd unit with `Restart=always`. One container serves the API and the
-client it renders. 509 MB resident of 23 GB. Getting there needed a VCN,
-internet gateway, route, security list and public subnet — all built and all
-inside the free allowance.
+**It is deployed and reachable**, on Render, over HTTPS. One container serves
+the API and the client it renders, the same image `make docker` builds.
 
-`VM.Standard.A1.Flex` capacity is the real obstacle, not configuration: AD-1
-refused 4/24, 2/12 and 1/6 in turn before a retry sweep caught a full 4/24 in
-AD-3. Expect to wait, and expect the wait to be unrelated to anything you did.
+It was previously run on an Oracle Cloud Always Free `VM.Standard.A1.Flex`
+instance. That path still works and the notes are in `docs/deploy.md`, but
+capacity for that shape is the real obstacle rather than configuration, so
+Render is the one to reach for first.
 
 **Two client features that were computed and never shown.** The route's
 heat-vs-time curve — the store had been fetching that series on every route
@@ -90,6 +87,21 @@ canopy share, sky view, p90 block).
 | `pyproj` and `scipy` undeclared | imported at runtime, absent from `server/pyproject.toml`. Worked only because a dev machine also installs the pipeline. A container crashed on the first request. |
 | every Brooklyn node labelled Manhattan | `nodes["borough"]` was hardcoded `"1"`, and buildings were fetched for one borough only — half the occluders, silently. |
 | the map never retried a failed first load | it remembered the bbox it failed on, so a slow-starting server left the city empty until someone panned. |
+
+**A phone layout.** Below 1000 px the rail is not rendered at all. Its
+contents ride over the map in a draggable sheet with three heights, so the map
+keeps the screen and the reader decides how much of it to cover. The gestures
+run on a small spring and momentum library in `web/src/motion/`, which the time
+scrubber uses too: a drag tracks the pointer 1:1, a release lands where the
+throw was going rather than where the finger stopped, and both ends of the
+travel give rather than stopping dead.
+
+**A handful of API and map fixes.** A malformed `bbox` now answers 422 rather
+than 500. `/api/departure-curve` rejects points outside the map and a walk to
+where you already are, which it used to answer with a full curve of zeroes. A
+camera move the reader did not make, such as fitting a new route, refetches the
+buildings for where the camera landed instead of keeping the geometry from the
+opening view.
 
 **Three validator checks that were lying** — one failing a correct
 manhattan+brooklyn build, two reporting decisions as unfinished work. See
