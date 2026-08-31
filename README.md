@@ -1,4 +1,4 @@
-# shadeway
+# Shadeway
 
 Pedestrian routing for New York that tells you what the walk will *feel like*, in
 degrees, and models the sun moving while you walk.
