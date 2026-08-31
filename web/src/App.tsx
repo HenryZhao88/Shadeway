@@ -65,7 +65,10 @@ export default function App() {
     <>
       {health && !health.cache_warm ? (
         <p className="banner calm">
-          The horizon cache is {Math.round(health.warm_fraction * 100)}% warm.
+          {/* Floor, not round: planting invalidates a few thousand samples out of
+              half a million, and rounding reported "100% warm" directly above a
+              warning that it is not warm. */}
+          The horizon cache is {Math.floor(health.warm_fraction * 100)}% warm.
           The first route through a block will be slow. Run{' '}
           <span className="num">make warm</span> before a demo.
         </p>

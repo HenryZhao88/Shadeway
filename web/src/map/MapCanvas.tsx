@@ -178,6 +178,18 @@ export default function MapCanvas() {
   // one onViewStateChange was already making. The retry interval in particular
   // was recreated faster than its own 2 s period, so it could never fire at
   // all while anyone was touching the map.
+  // A camera move the reader did not make — fitting a new route, centring on
+  // their location — never reaches onViewStateChange, which only fires for
+  // interaction. Without this the map keeps whatever geometry it had before the
+  // move: after a route auto-zoomed, the buildings were still the ones fetched
+  // for the opening view, so most of what was on screen had none.
+  //
+  // Cheap enough to run per frame: it resets one timer, and the settle callback
+  // drops any bbox it has already asked for.
+  useEffect(() => {
+    requestViewportData(viewState);
+  }, [requestViewportData, viewState]);
+
   useEffect(() => {
     requestViewportData(latestView.current);
     const onResize = () => requestViewportData(latestView.current);

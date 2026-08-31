@@ -1614,6 +1614,10 @@ input[type="range"]::-moz-range-thumb {
   /* This element owns the pointer for the whole drag. The scroller below opts
      back in, but only at the height where there is something to scroll. */
   touch-action: none;
+  /* And a drag is a drag, not a text selection. Without this, pulling the sheet
+     with a pointer highlights whatever it passes over. */
+  user-select: none;
+  -webkit-user-select: none;
   overscroll-behavior: contain;
   will-change: transform;
 }
