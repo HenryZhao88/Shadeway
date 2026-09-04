@@ -71,7 +71,7 @@ export default function Hero() {
             <b>
               {Math.round(extraMinutes) <= 0
                 ? 'No extra walking'
-                : `${Math.round(extraMinutes)} extra minutes`}
+                : `${Math.round(extraMinutes)} extra ${Math.round(extraMinutes) === 1 ? 'minute' : 'minutes'}`}
             </b>{' '}
             buys you <b>{deltaDegrees(delta, unitSystem)}°</b>.
           </>

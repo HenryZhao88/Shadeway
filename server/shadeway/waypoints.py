@@ -118,7 +118,10 @@ def suggest(
         if leg_index == len(route.legs) - 1:
             break  # no point suggesting a stop on the doorstep
 
-        x, y = graph.sample_xy[int(graph.sample_ids(leg.edge_id)[-1])]
+        ids = graph.sample_ids(leg.edge_id)
+        if not len(ids):
+            continue
+        x, y = graph.sample_xy[int(ids[-1])]
         pick = next(
             (
                 (record_index, distance)

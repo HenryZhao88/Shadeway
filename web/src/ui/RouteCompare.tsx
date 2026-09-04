@@ -8,7 +8,11 @@ import { degrees, deltaDegrees, heatCss, signedDegrees } from '../heat';
 import { chosenRouteId, useStore } from '../state/store';
 import { clock, minutes } from '../sun/position';
 import type { Route } from '../api/types';
-import { temperatureUnit, type UnitSystem } from '../units';
+import {
+  temperatureDeltaValue,
+  temperatureUnit,
+  type UnitSystem,
+} from '../units';
 
 export default function RouteCompare() {
   const route = useStore((s) => s.route);
@@ -79,7 +83,10 @@ function Option({
   const isFastest = option.route_id === fastest.route_id;
   // "+0 min, the same" reads like a bug rather than a fact. If neither number
   // moves once rounded, this option simply has nothing to say about the other.
-  const differs = Math.round(Math.abs(deltaMin)) > 0 || Math.round(Math.abs(deltaC)) > 0;
+  const roundedDeltaMin = Math.round(deltaMin);
+  const differs =
+    roundedDeltaMin !== 0 ||
+    Math.round(Math.abs(temperatureDeltaValue(deltaC, unitSystem))) > 0;
 
   return (
     <button
@@ -100,7 +107,7 @@ function Option({
           {minutes(option.duration_s)} min · arrive {clock(option.arrive_iso)}
           {isFastest || !differs
             ? ''
-            : ` · ${deltaMin >= 0 ? '+' : '−'}${Math.abs(Math.round(deltaMin))} min, ${signedDegrees(deltaC, unitSystem)}`}
+            : ` · ${roundedDeltaMin < 0 ? '−' : '+'}${Math.abs(roundedDeltaMin)} min, ${signedDegrees(deltaC, unitSystem)}`}
         </span>
       </span>
       <span

@@ -62,7 +62,7 @@ def build(graph, path, legs, evidence=None) -> list[Instruction]:
     out.append(
         Instruction(
             type="start",
-            at=at(first),
+            at=at(legs[0]),
             text=(
                 f"Head off along the {start_side} of {first.street_name}"
                 if start_side

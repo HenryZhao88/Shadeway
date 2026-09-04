@@ -84,14 +84,18 @@ export default function Endpoints() {
   }, [routeGeneration]);
 
   useEffect(() => {
-    setDraft((current) => ({ ...current, origin: origin?.label ?? '' }));
+    if (origin) {
+      setDraft((current) => ({ ...current, origin: origin.label }));
+    }
   }, [origin]);
 
   useEffect(() => {
-    setDraft((current) => ({
-      ...current,
-      destination: destination?.label ?? '',
-    }));
+    if (destination) {
+      setDraft((current) => ({
+        ...current,
+        destination: destination.label,
+      }));
+    }
   }, [destination]);
 
   useEffect(

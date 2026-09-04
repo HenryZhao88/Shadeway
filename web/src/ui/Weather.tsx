@@ -58,7 +58,7 @@ export default function Weather() {
           {health.n_samples.toLocaleString()} sample points ·{' '}
           {health.cache_warm
             ? 'horizon cache warm'
-            : `cache ${Math.round(health.warm_fraction * 100)}% warm`}
+            : `cache ${Math.floor(health.warm_fraction * 100)}% warm`}
         </p>
       ) : null}
     </section>
