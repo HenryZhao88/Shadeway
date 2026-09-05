@@ -60,9 +60,10 @@ export default function BottomSheet({
   const size = useRef({ container: 0, sheet: 0 });
   /** How far the sheet is pushed down from fully open. 0 is full. */
   const offset = useRef(0);
-  const gesture = useRef<{ id: number; grabbedAt: number; from: number } | null>(
+  const gesture = useRef<{ id: number; grabbedAt: number; from: number; capture: Element } | null>(
     null,
   );
+  const suppressClick = useRef(false);
   const velocity = useRef(new VelocityTracker()).current;
   /** The detent the sheet is actually resting at, readable inside handlers
    *  without making them depend on the render that produced them. */
@@ -92,6 +93,8 @@ export default function BottomSheet({
 
   const spring = useRef<Spring | null>(null);
   if (!spring.current) spring.current = createSpring(0, paint, { restDelta: 0.4 });
+
+  useEffect(() => () => spring.current?.stop(), []);
 
   const settleTo = useCallback(
     (next: Detent, speed = 0) => {
@@ -142,29 +145,40 @@ export default function BottomSheet({
     // The grip always drags. Everywhere else on the sheet drags too, but only
     // while the content is not scrollable — at full height the content is the
     // thing under the finger, and stealing its scroll would be indefensible.
-    if ((target as Element | null)?.closest?.('[data-sheet-grip]')) return true;
+    const element = target as Element | null;
+    if (element?.closest?.('[data-sheet-grip]')) return true;
+    // Keep taps, text editing, links and native controls owned by the control.
+    if (element?.closest?.('button, input, textarea, select, a, label, summary, [role="button"], [contenteditable="true"]')) return false;
     return resting.current !== 'full';
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (gesture.current) return;
+    suppressClick.current = false;
     if (!ownsGesture(event.target)) return;
     const node = sheet.current;
     if (!node) return;
     spring.current!.stop();
+    // A grip tap must still click its button when capture retargets pointerup.
+    const capture = (event.target as Element).closest('[data-sheet-grip]')
+      ? event.target as Element
+      : node;
     gesture.current = {
       id: event.pointerId,
       grabbedAt: event.clientY,
       from: offset.current,
+      capture,
     };
     velocity.reset(event.clientY);
-    node.setPointerCapture(event.pointerId);
+    capture.setPointerCapture(event.pointerId);
     setDragging(true);
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLElement>) => {
     const drag = gesture.current;
     if (!drag || drag.id !== event.pointerId) return;
+    if (Math.abs(event.clientY - drag.grabbedAt) > 5) suppressClick.current = true;
     velocity.add(event.clientY);
     const raw = drag.from + (event.clientY - drag.grabbedAt);
     const { full, peek } = stops();
@@ -182,8 +196,8 @@ export default function BottomSheet({
     if (!drag || drag.id !== event.pointerId) return;
     gesture.current = null;
     setDragging(false);
-    if (sheet.current?.hasPointerCapture(event.pointerId)) {
-      sheet.current.releasePointerCapture(event.pointerId);
+    if (drag.capture.hasPointerCapture(event.pointerId)) {
+      drag.capture.releasePointerCapture(event.pointerId);
     }
     const speed = thrown ? velocity.velocity : 0;
     // Land on the detent the throw was heading for, not the one it left from.
@@ -215,6 +229,12 @@ export default function BottomSheet({
       onPointerMove={onPointerMove}
       onPointerUp={(event) => endGesture(event)}
       onPointerCancel={(event) => endGesture(event, false)}
+      onClickCapture={(event) => {
+        if (!suppressClick.current || event.detail === 0) return;
+        suppressClick.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
     >
       <div className="sheet-grip" data-sheet-grip>
         <button

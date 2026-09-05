@@ -49,6 +49,8 @@ def load(scope: Scope) -> gpd.GeoDataFrame:
     # gpd.read_file parses the FeatureCollection (geometry is null everywhere —
     # we ignore it) and hands back the property columns
     props = gpd.read_file(_download(scope))
+    if "status" in props.columns:
+        props = props[props["status"].eq("Alive")].reset_index(drop=True)
     lon = pd.to_numeric(props["longitude"], errors="coerce")
     lat = pd.to_numeric(props["latitude"], errors="coerce")
     points = gpd.GeoDataFrame(
@@ -71,9 +73,7 @@ def load(scope: Scope) -> gpd.GeoDataFrame:
         crs="EPSG:4326",
     )
     points = points[points.geometry.is_valid & points.geometry.notna()]
-    points = points[
-        (points.geometry.x > -74.3) & (points.geometry.x < -73.7)
-        & (points.geometry.y > 40.5) & (points.geometry.y < 40.92)
-    ]
+    west, south, east, north = scope.bbox_wgs84
+    points = points.cx[west:east, south:north]
     points = points[points["borough"].isin(scope.boroughs)]
     return points.to_crs(TARGET_CRS).reset_index(drop=True)

@@ -183,6 +183,14 @@ let routeAbort: AbortController | undefined;
 let timeseriesAbort: AbortController | undefined;
 let departureAbort: AbortController | undefined;
 let viewportAbort: AbortController | undefined;
+let healthAbort: AbortController | undefined;
+
+/** A trip owns all three requests, even before its route has arrived. */
+function abortTripRequests() {
+  routeAbort?.abort();
+  timeseriesAbort?.abort();
+  departureAbort?.abort();
+}
 
 function initialDeparture(): Date {
   const now = new Date();
@@ -262,6 +270,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setPlace: (which, place) => {
+    abortTripRequests();
     set({
       [which]: place,
       ...(which === 'origin' ? { originMode: 'custom' as const } : {}),
@@ -279,7 +288,8 @@ export const useStore = create<State>((set, get) => ({
     if (get().origin && get().destination) void get().fetchRoute();
   },
 
-  clearPlace: (which) =>
+  clearPlace: (which) => {
+    abortTripRequests();
     set({
       [which]: null,
       ...(which === 'origin' ? { originMode: 'custom' as const } : {}),
@@ -291,19 +301,18 @@ export const useStore = create<State>((set, get) => ({
       departure: null,
       departureStatus: 'idle',
       overrideRouteId: null,
-    } as Partial<State>),
+    } as Partial<State>);
+  },
 
   setTrip: (origin, destination, departAt) => {
+    abortTripRequests();
     clearTimeout(debounceTimer);
+    const departure = departAt ?? get().scrubAt;
     set({
       origin,
       destination,
-      ...(departAt
-        ? {
-            scrubAt: new Date(departAt),
-            departAt: new Date(departAt),
-          }
-        : {}),
+      scrubAt: new Date(departure),
+      departAt: new Date(departure),
       originMode: 'custom',
       pickMode: 'none',
       route: null,
@@ -319,6 +328,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   selectCurrentLocation: () => {
+    abortTripRequests();
     const current = get().currentLocation;
     set({
       origin: current,
@@ -340,7 +350,8 @@ export const useStore = create<State>((set, get) => ({
   updateCurrentLocation: (place) => {
     const state = get();
     const firstFix = state.currentLocation === null;
-    const adoptAsOrigin = state.originMode === 'current' && !state.route;
+    const adoptAsOrigin =
+      state.originMode === 'current' && !state.route && state.routeStatus !== 'loading';
     set({
       currentLocation: place,
       locationStatus: 'tracking',
@@ -402,10 +413,13 @@ export const useStore = create<State>((set, get) => ({
   toggleAmenities: () => set({ showAmenities: !get().showAmenities }),
 
   fetchRoute: async () => {
-    routeAbort?.abort();
-    timeseriesAbort?.abort();
+    abortTripRequests();
     routeAbort = new AbortController();
     const signal = routeAbort.signal;
+    set({
+      departure: null,
+      departureStatus: 'idle',
+    });
     const {
       origin,
       destination,
@@ -443,7 +457,10 @@ export const useStore = create<State>((set, get) => ({
       });
       if (signal.aborted) return;
       set((state) => ({
-        route: response,
+        route: state.profileKey === profileKey ? response : {
+          ...response,
+          chosen_route_id: chooseForProfile(response, PROFILES[state.profileKey]!),
+        },
         routeStatus: 'ready',
         routeError: null,
         routeGeneration: state.routeGeneration + 1,
@@ -454,8 +471,16 @@ export const useStore = create<State>((set, get) => ({
       void get().fetchTimeseries();
       void get().fetchDeparture();
     } catch (error) {
-      if (aborted(error)) return;
-      set({ routeStatus: 'error', routeError: message(error) });
+      if (signal.aborted || aborted(error)) return;
+      set((state) => ({
+        routeStatus: 'error',
+        routeError: message(error),
+        // The old route stays visible on failure. Keep its completed chart,
+        // or report that its cancelled request did not finish.
+        timeseriesStatus: state.route
+          ? Object.keys(state.timeseries).length ? 'ready' : 'error'
+          : 'idle',
+      }));
     }
   },
 
@@ -494,7 +519,7 @@ export const useStore = create<State>((set, get) => ({
       if (signal.aborted) return;
       set({ departure: response, departureStatus: 'ready' });
     } catch (error) {
-      if (aborted(error)) return;
+      if (signal.aborted || aborted(error)) return;
       set({ departureStatus: 'error' });
     }
   },
@@ -558,9 +583,15 @@ export const useStore = create<State>((set, get) => ({
   },
 
   fetchHealth: async () => {
+    healthAbort?.abort();
+    healthAbort = new AbortController();
+    const signal = healthAbort.signal;
     try {
-      set({ health: await getHealth() });
-    } catch {
+      const health = await getHealth(signal);
+      if (signal.aborted) return;
+      set({ health });
+    } catch (error) {
+      if (signal.aborted || aborted(error)) return;
       set({ health: null });
     }
   },
@@ -582,6 +613,7 @@ export const useStore = create<State>((set, get) => ({
       // used to fall into fetchRoute's "choose a destination" branch and put
       // that in the planner's error slot, as though the planting had failed.
       if (get().origin && get().destination) await get().fetchRoute();
+      await get().fetchHealth();
     } catch (error) {
       if (aborted(error)) return;
       set({ routeError: message(error) });

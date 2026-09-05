@@ -1,9 +1,15 @@
-# The raw downloads and alternate builds are hundreds of MB. The runtime image
-# ships only the validated Manhattan boundary used by the production service.
+# Include runtime artifacts for OUT=data/<build>, including alternate borough
+# builds. Raw downloads and auxiliary caches stay out of the build context.
 data/*
-!data/nyc/
-!data/nyc/**
-data/nyc/horizon.legacy.npz
+!data/*/
+data/*/*
+!data/*/amenities.parquet
+!data/*/buildings.parquet
+!data/*/edges.parquet
+!data/*/nodes.parquet
+!data/*/samples.parquet
+!data/*/trees.parquet
+!data/*/horizon.npz
 
 # Built inside the image, from source.
 node_modules

@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from shadeway_contracts.tables import TREES
 from shadeway_pipeline.scene.species import MEDIAN_DBH_CM, lookup
 
 CROWN_BASE_FRACTION = 0.35  # crown starts at 35% of tree height...
@@ -35,4 +36,4 @@ def build_crowns(tree_points) -> pd.DataFrame:
                 "tau_source": tau_source,
             }
         )
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=TREES.names)

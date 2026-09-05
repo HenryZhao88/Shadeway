@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 import pyarrow.parquet as pq
 
+from shadeway.horizon import source_fingerprint
+
 REQUIRED_PARQUET = (
     "amenities.parquet",
     "buildings.parquet",
@@ -36,6 +38,9 @@ def verify(root: Path) -> tuple[int, int]:
     with np.load(root / "horizon.npz", allow_pickle=False) as cache:
         if not {"store", "tau", "fingerprint"}.issubset(cache.files):
             raise ValueError("horizon cache must use the fingerprinted v2 format")
+        fingerprint = cache["fingerprint"]
+        if fingerprint.shape != () or str(fingerprint.item()) != source_fingerprint(root):
+            raise ValueError("horizon cache fingerprint does not match the city source files")
         store = cache["store"]
         tau = cache["tau"]
         if store.dtype != np.uint8 or tau.dtype != np.uint8:

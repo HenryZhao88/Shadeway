@@ -54,3 +54,29 @@ def test_datasets_json_pins_every_key():
     for key in DATASET_QUERIES:
         assert key in pinned, key
         assert "-" in pinned[key], f"{key} does not look like a socrata id"
+
+
+def test_socrata_cache_keys_include_the_requested_limit(monkeypatch):
+    from shadeway_pipeline.sources import fetch
+
+    monkeypatch.setattr(fetch, "cached_download", lambda url, filename: filename)
+    first = fetch.socrata_geojson("abcd-1234", where="borough='1'", limit=1)
+    full = fetch.socrata_geojson("abcd-1234", where="borough='1'", limit=500_000)
+    assert first != full
+
+
+def test_socrata_cache_keys_are_stable_across_python_processes():
+    import os
+    import subprocess
+    import sys
+
+    script = (
+        "from shadeway_pipeline.sources import fetch; "
+        "fetch.cached_download = lambda url, filename: filename; "
+        "print(fetch.socrata_geojson('abcd-1234', where=\"borough='1'\"))"
+    )
+    names = [subprocess.check_output(
+        [sys.executable, "-c", script], env={**os.environ, "PYTHONHASHSEED": seed},
+        text=True,
+    ).strip() for seed in ("1", "2")]
+    assert names[0] == names[1]

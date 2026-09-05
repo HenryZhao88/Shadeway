@@ -1,6 +1,6 @@
 import geopandas as gpd
 import pytest
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString, MultiLineString, Polygon
 
 from shadeway_pipeline.config import SCOPES, TARGET_CRS
 from shadeway_pipeline.sources import buildings, cscl
@@ -66,6 +66,50 @@ def test_cscl_filters_non_walkable_and_other_boroughs(tmp_path, monkeypatch):
     monkeypatch.setattr(cscl, "PREFETCHED", path)
     out = cscl.load(SCOPES["manhattan"])
     assert len(out) == 1
+
+
+def test_cscl_filters_same_borough_streets_outside_the_scope(monkeypatch):
+    frame = gpd.GeoDataFrame(
+        {
+            "physicalid": ["1", "2", "3"],
+            "full_street_name": ["Midtown", "Downtown", "Multipart"],
+            "boroughcode": ["1", "1", "1"],
+            "rw_type": ["1", "1", "1"],
+        },
+        geometry=[
+            LineString([(-73.985, 40.750), (-73.984, 40.751)]),
+            LineString([(-74.010, 40.710), (-74.009, 40.711)]),
+            MultiLineString([
+                [(-73.985, 40.750), (-73.984, 40.751)],
+                [(-74.010, 40.710), (-74.009, 40.711)],
+            ]),
+        ],
+        crs="EPSG:4326",
+    )
+    monkeypatch.setattr(cscl, "_download", lambda scope: None)
+    monkeypatch.setattr(gpd, "read_file", lambda path: frame)
+    assert list(cscl.load(SCOPES["midtown"])["physical_id"]) == [1, 3]
+
+
+def test_tree_source_filters_to_the_scope_and_live_trees(monkeypatch):
+    from shadeway_pipeline.sources import trees
+
+    frame = gpd.GeoDataFrame(
+        {
+            "longitude": [-73.985, -74.010, -73.984, -73.983],
+            "latitude": [40.750, 40.710, 40.751, 40.752],
+            "borocode": ["1"] * 4,
+            "status": ["Alive", "Alive", "Dead", "Stump"],
+            "tree_dbh": [10, 20, 10, 10],
+        },
+        geometry=[None] * 4,
+        crs="EPSG:4326",
+    )
+    monkeypatch.setattr(trees, "_download", lambda scope: None)
+    monkeypatch.setattr(gpd, "read_file", lambda path: frame)
+    found = trees.load(SCOPES["midtown"])
+    assert len(found) == 1
+    assert found.iloc[0].dbh_cm == 25.4
 
 
 def test_buildings_height_is_metres_and_positive(tmp_path, monkeypatch):

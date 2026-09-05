@@ -19,9 +19,12 @@ load: a shaded stroll at 24 C never earns a rest stop, which is correct.
 from __future__ import annotations
 
 import numpy as np
+from pyproj import Transformer
 
 from shadeway_contracts.api import Instruction, LatLon, WaypointSuggestion
-from shadeway_contracts.tables import AmenityKind
+from shadeway_contracts.tables import CRS_EPSG, AmenityKind
+
+_to_xy = Transformer.from_crs("EPSG:4326", f"EPSG:{CRS_EPSG}", always_xy=True)
 
 # UTCI category boundary: below this there is no heat stress to accumulate.
 COMFORT_BASELINE_C = 26.0
@@ -121,7 +124,11 @@ def suggest(
         ids = graph.sample_ids(leg.edge_id)
         if not len(ids):
             continue
-        x, y = graph.sample_xy[int(ids[-1])]
+        # Samples always run u -> v; the leg geometry follows the actual walk.
+        # Anchor the detour at the sampled end the pedestrian has just reached.
+        exit_xy = np.asarray(_to_xy.transform(*leg.geometry[-1]))
+        ends = graph.sample_xy[[int(ids[0]), int(ids[-1])]]
+        x, y = ends[np.argmin(np.sum((ends - exit_xy) ** 2, axis=1))]
         pick = next(
             (
                 (record_index, distance)

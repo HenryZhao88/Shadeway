@@ -100,6 +100,15 @@ def test_entrance_count_is_capped_per_park(monkeypatch):
     assert 0 < len(found) <= parks.MAX_ENTRANCES_PER_PARK
 
 
+def test_entrances_use_sidewalk_distance_not_its_bounding_box(monkeypatch):
+    monkeypatch.setattr(parks, "load_polygons", lambda scope: _park_frame())
+    sidewalk = LineString([(-100.0, 100.0), (100.0, -100.0)])
+    found = parks.entrances(_scope(), [sidewalk])
+    assert len(found)
+    assert all(point.distance(sidewalk) <= parks.SIDEWALK_REACH_M
+               for point in found.geometry)
+
+
 # ------------------------------------------------------------------ helpers
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 from pathlib import Path
 
@@ -50,5 +51,8 @@ def socrata_geojson(
     if where:
         query += f"&$where={requests.utils.quote(where)}"
     url = f"https://{SOCRATA_DOMAIN}/resource/{dataset_id}.geojson?{query}"
-    stem = dataset_id if not where else f"{dataset_id}_{abs(hash(where)) % 10**8}"
+    # Python's hash() changes between processes, and a limit is part of the
+    # response identity too: a one-row probe must not shadow the full export.
+    digest = hashlib.sha256(url.encode()).hexdigest()[:16]
+    stem = f"{dataset_id}_{digest}"
     return cached_download(url, f"{stem}.geojson")

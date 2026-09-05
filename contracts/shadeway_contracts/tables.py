@@ -138,6 +138,8 @@ def validate_table(name: str, table: pa.Table) -> None:
             problems.append(
                 f"column {field.name} has type {actual[field.name]}, expected {field.type}"
             )
+        elif not field.nullable and table.column(field.name).null_count:
+            problems.append(f"column {field.name} contains null values but is required")
     for extra in set(actual) - {f.name for f in expected}:
         problems.append(f"unexpected column {extra}")
     if problems:

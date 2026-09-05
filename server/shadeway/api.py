@@ -18,6 +18,7 @@ import numpy as np
 import shapely
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import AwareDatetime
 from pyproj import Transformer
 from starlette.middleware.gzip import GZipMiddleware
 
@@ -30,7 +31,7 @@ from shadeway.horizon import FINGERPRINT_FILES, HorizonCache, source_fingerprint
 from shadeway.router import timedep
 from shadeway.router.graph import Graph
 from shadeway.scene import Scene
-from shadeway.weather import WeatherClient
+from shadeway.weather import WeatherClient, forecast_hour
 from shadeway_contracts.api import (
     DepartureCurveResponse,
     DeparturePoint,
@@ -285,9 +286,14 @@ def _cost_model(origin_lonlat, when: datetime, walk_speed_ms: float) -> EdgeCost
     return model
 
 
-def _leg(edge_id: int, enter_at: datetime, cost) -> LegStep:
+def _leg(edge_id: int, enter_at: datetime, cost, from_node: int) -> LegStep:
     graph = _state().graph
     coords = shapely.get_coordinates(graph.geometry(edge_id))
+    # Geometry is stored u -> v, while pedestrian paths can traverse either
+    # direction. Every downstream instruction and navigation pin consumes the
+    # geometry as walked, so orient it at the response boundary.
+    if from_node != int(graph.edge_u[edge_id]):
+        coords = coords[::-1]
     lon, lat = _to_ll.transform(coords[:, 0], coords[:, 1])
     return LegStep(
         edge_id=int(edge_id),
@@ -319,9 +325,9 @@ def _to_route(
     legs: list[LegStep] = []
     canopy_fractions: list[float] = []
     clock = depart
-    for edge_id in path.edges:
+    for from_node, edge_id in zip(path.nodes, path.edges):
         cost = model.traverse(edge_id, clock)
-        legs.append(_leg(edge_id, clock, cost))
+        legs.append(_leg(edge_id, clock, cost, from_node))
         canopy_fractions.append(cost.mean_canopy_fraction)
         clock += timedelta(seconds=cost.duration_s)
 
@@ -435,7 +441,7 @@ def _route_locked(request: RouteRequest, state: AppState) -> RouteResponse:
 @app.get("/api/route/{route_id}/timeseries", response_model=TimeseriesResponse)
 def timeseries(
     route_id: str,
-    depart_iso: datetime,
+    depart_iso: AwareDatetime,
     step_minutes: int = Query(default=5, ge=1, le=60),
     hours: float = Query(default=0.0, ge=0.0, le=12.0),
     walk_speed_ms: float | None = Query(default=None, gt=0.3, le=3.0),
@@ -477,7 +483,7 @@ def _timeseries_locked(
     if cached is None:
         raise HTTPException(404, "unknown route id — request /api/route first")
     built, edges, origin_request = cached
-    lon, lat = built.legs[0].geometry[0]
+    lon, lat = origin_request.origin.lon, origin_request.origin.lat
     speed = walk_speed_ms if walk_speed_ms is not None else origin_request.walk_speed_ms
 
     # One cost model PER HOUR, not one for the whole window.
@@ -496,9 +502,11 @@ def _timeseries_locked(
     models: dict[datetime, EdgeCostModel] = {}
 
     def model_at(when: datetime) -> EdgeCostModel:
-        hour = when.replace(minute=0, second=0, microsecond=0)
+        # /route uses the nearest forecast hour, including the next hour after
+        # :30. Flooring here made the very same walk use different weather.
+        hour = forecast_hour(when)
         if hour not in models:
-            models[hour] = _cost_model((lon, lat), hour, speed)
+            models[hour] = _cost_model((lon, lat), when, speed)
         return models[hour]
 
     window_minutes = hours * 60.0 if hours > 0 else built.duration_s / 60.0
@@ -541,7 +549,7 @@ def _timeseries_locked(
 @app.get("/api/departure-curve", response_model=DepartureCurveResponse)
 def departure_curve(
     origin_lat: float, origin_lon: float, dest_lat: float, dest_lon: float,
-    from_iso: datetime, hours: int = Query(default=4, ge=1, le=12),
+    from_iso: AwareDatetime, hours: int = Query(default=4, ge=1, le=12),
     walk_speed_ms: float = Query(default=1.35, gt=0.3, le=3.0),
 ) -> DepartureCurveResponse:
     state = _state()
@@ -632,7 +640,11 @@ def _departure_curve_locked(
 
 
 @app.get("/api/weather", response_model=WeatherSnapshot)
-def weather(lat: float, lon: float, at_iso: datetime) -> WeatherSnapshot:
+def weather(
+    lat: float = Query(ge=-90, le=90),
+    lon: float = Query(ge=-180, le=180),
+    at_iso: AwareDatetime = Query(),
+) -> WeatherSnapshot:
     return _state().weather.at(lat, lon, at_iso)
 
 

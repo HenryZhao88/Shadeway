@@ -20,11 +20,11 @@ install: venv
 
 test:
 	$(PY) -m shadeway_contracts.export_ts --out web/src/api/types.ts --check
-	$(PY) -m pytest contracts/tests server/tests pipeline/tests -q --import-mode=importlib
+	$(PY) -m pytest contracts/tests server/tests pipeline/tests deploy/tests -q --import-mode=importlib
 	npm --workspace web run test -- --run
 
 lint:
-	.venv/bin/ruff check contracts pipeline server
+	.venv/bin/ruff check contracts pipeline server deploy
 	npm --workspace web run lint
 
 types:

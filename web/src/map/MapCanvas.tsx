@@ -141,14 +141,17 @@ export default function MapCanvas() {
       clearTimeout(settleTimer.current);
       settleTimer.current = setTimeout(() => {
         const box = bboxFor(next);
-        const key = box.map((v) => v.toFixed(3)).join(',');
+        const load = renderBudget(next).buildingLoad;
+        // A tiny zoom can cross the detail threshold without changing any
+        // rounded bounds. That still needs a different building request.
+        const key = `${box.map((v) => v.toFixed(3)).join(',')}:${load.maxFeatures}:${load.complete}`;
         if (key === lastBbox.current) return;
         if (key !== retryBbox.current) {
           retryBbox.current = key;
           retryCount.current = 0;
         }
         lastBbox.current = key;
-        void fetchViewportData(box, renderBudget(next).buildingLoad).then((ok) => {
+        void fetchViewportData(box, load).then((ok) => {
           if (ok) {
             retryCount.current = 0;
             return;
@@ -270,8 +273,10 @@ export default function MapCanvas() {
         return;
       }
       setTooltip({ x: info.x, y: info.y, lines });
-      const legIndex = (info.object as { legIndex?: number } | null)?.legIndex;
-      hoverLeg(typeof legIndex === 'number' ? legIndex : null);
+      const leg = info.object as { legIndex?: number; chosen?: boolean } | null;
+      // Leg indexes belong to their route, while the linked strip shows only
+      // the chosen route. An alternative's index must not highlight that strip.
+      hoverLeg(leg?.chosen && typeof leg.legIndex === 'number' ? leg.legIndex : null);
     },
     [hoverLeg, hoveredLegIndex, unitSystem],
   );

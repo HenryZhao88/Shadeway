@@ -137,3 +137,74 @@ def test_offsets_check_replaces_the_unreachable_width_check():
     names = {c.name for c in checks}
     assert "offsets_from_streetwidth" in names
     assert "sidewalk_widths" not in names
+
+
+def test_offsets_check_detects_the_actual_fallback_sidewalk_gap():
+    import pyarrow as pa
+    from shapely.geometry import LineString
+
+    from shadeway_contracts.tables import EDGES
+    from shadeway_pipeline.config import offset_for
+
+    tables = build_fixture_city()
+    edges = tables["edges"].to_pydict()
+    offset = offset_for(None)
+    for i, (kind, side) in enumerate(zip(edges["kind"], edges["side"])):
+        if kind == 0:
+            y = offset if side == 0 else -offset
+            edges["geom_wkb"][i] = LineString([(0, y), (100, y)]).wkb
+    tables["edges"] = pa.table(edges, schema=EDGES)
+    check = _named(validate.run_checks(tables), "offsets_from_streetwidth")
+    assert not check.ok
+    assert check.detail.startswith("0%")
+
+
+def test_a_dangling_edge_endpoint_fails_validation_without_crashing():
+    import pyarrow as pa
+
+    from shadeway_contracts.tables import EDGES
+
+    tables = build_fixture_city()
+    edges = tables["edges"].to_pydict()
+    edges["u"][0] = tables["nodes"].num_rows + 100
+    tables["edges"] = pa.table(edges, schema=EDGES)
+    checks = validate.run_checks(tables)
+    assert not _named(checks, "edge_endpoints").ok
+    assert validate.exit_code(checks) == 1
+
+
+def test_a_sample_block_extending_past_the_table_fails_validation():
+    import pyarrow as pa
+
+    from shadeway_contracts.tables import EDGES
+
+    tables = build_fixture_city()
+    edges = tables["edges"].to_pydict()
+    edges["sample_count"][-1] += 100
+    tables["edges"] = pa.table(edges, schema=EDGES)
+    assert not _named(validate.run_checks(tables), "sample_tiling").ok
+
+
+def test_exchanging_sample_blocks_between_edges_fails_validation():
+    import pyarrow as pa
+
+    from shadeway_contracts.tables import EDGES
+
+    tables = build_fixture_city()
+    edges = tables["edges"].to_pydict()
+    starts = edges["sample_start"]
+    starts[0], starts[1] = starts[1], starts[0]
+    tables["edges"] = pa.table(edges, schema=EDGES)
+    assert not _named(validate.run_checks(tables), "sample_tiling").ok
+
+
+def test_sample_ids_must_match_their_row_indices():
+    import pyarrow as pa
+
+    from shadeway_contracts.tables import SAMPLES
+
+    tables = build_fixture_city()
+    samples = tables["samples"].to_pydict()
+    samples["sample_id"][0] = 100_000
+    tables["samples"] = pa.table(samples, schema=SAMPLES)
+    assert validate.exit_code(validate.run_checks(tables)) == 1

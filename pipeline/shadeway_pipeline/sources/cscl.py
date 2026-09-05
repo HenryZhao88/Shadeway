@@ -51,6 +51,14 @@ def load(scope: Scope) -> gpd.GeoDataFrame:
     frame = frame[frame["boroughcode"].astype(str).isin(scope.boroughs)]
     # geometry arrives as MultiLineString — explode before anything else
     frame = frame.explode(index_parts=False)
+    frame = frame[
+        frame.geometry.notna() & ~frame.geometry.is_empty
+        & (frame.geometry.geom_type == "LineString")
+    ]
+    # A borough download is shared by the small development scope and the
+    # full city. Filter each exploded segment against the requested area.
+    west, south, east, north = scope.bbox_wgs84
+    frame = frame.to_crs("EPSG:4326").cx[west:east, south:north]
     # Reproject BEFORE taking midpoints. Interpolating along a geographic CRS
     # measures distance in degrees, which is not a distance; geopandas warns
     # about exactly this. At normalized 0.5 the answer barely moves, but the

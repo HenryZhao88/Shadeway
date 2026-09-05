@@ -80,6 +80,31 @@ def run_checks(tables: dict[str, pa.Table]) -> list[Check]:
     if not network_nonempty:
         return checks
 
+    # The server addresses these arrays by ID, without a join. A correctly
+    # typed table with shuffled or duplicate IDs is still unusable at runtime.
+    bad_ids = [
+        name for name, column in (
+            ("nodes", "node_id"), ("edges", "edge_id"), ("samples", "sample_id")
+        )
+        if not np.array_equal(
+            np.asarray(tables[name].column(column)), np.arange(tables[name].num_rows)
+        )
+    ]
+    checks.append(Check(
+        "row_index_ids", not bad_ids, "hard",
+        f"IDs differ from row indices: {', '.join(bad_ids)}"
+        if bad_ids else "node, edge and sample IDs match their row indices",
+    ))
+
+    node_set = set(nodes["node_id"])
+    dangling = (set(edges["u"]) | set(edges["v"])) - node_set
+    checks.append(Check(
+        "edge_endpoints", not dangling, "hard",
+        f"{len(dangling)} endpoint IDs missing from nodes",
+    ))
+    if dangling:
+        return checks  # connectivity assumes every endpoint has a node
+
     # --- connectivity ------------------------------------------------------
     parent = {int(n): int(n) for n in nodes["node_id"]}
 
@@ -153,17 +178,28 @@ def run_checks(tables: dict[str, pa.Table]) -> list[Check]:
     # --- sample tiling -----------------------------------------------------
     covered = np.zeros(samples.num_rows, dtype=bool)
     overlap = False
-    for start, count in zip(edges["sample_start"], edges["sample_count"]):
-        block = slice(int(start), int(start) + int(count))
+    invalid_blocks = 0
+    wrong_owners = 0
+    sample_edges = np.asarray(samples.column("edge_id"))
+    for edge_id, start, count in zip(
+        edges["edge_id"], edges["sample_start"], edges["sample_count"]
+    ):
+        start, count = int(start), int(count)
+        if count < 2 or start + count > samples.num_rows:
+            invalid_blocks += 1
+            continue
+        block = slice(start, start + count)
         overlap |= bool(covered[block].any())
         covered[block] = True
+        wrong_owners += int(not np.all(sample_edges[block] == edge_id))
     checks.append(
         Check(
             "sample_tiling",
-            bool(covered.all()) and not overlap,
+            bool(covered.all()) and not overlap and not invalid_blocks and not wrong_owners,
             "hard",
             f"{int(covered.sum())}/{samples.num_rows} samples claimed, "
-            f"overlap={overlap}",
+            f"overlap={overlap}, invalid blocks={invalid_blocks}, "
+            f"wrong edge ownership={wrong_owners}",
         )
     )
 
@@ -226,9 +262,9 @@ def run_checks(tables: dict[str, pa.Table]) -> list[Check]:
     # the per-street offsets, and on a wide avenue that offset is the difference
     # between the two sidewalks being 13 m and 25 m apart — which is the whole
     # side-of-street claim.
-    from shadeway_pipeline.config import SIDEWALK_HALF_WIDTH_M, offset_for
+    from shadeway_pipeline.config import offset_for
 
-    fallback_span = 2.0 * (offset_for(None) - SIDEWALK_HALF_WIDTH_M)
+    fallback_span = 2.0 * offset_for(None)
     street_spans = _street_spans(edges)
     varied = [gap for gap in street_spans if abs(gap - fallback_span) > 0.5]
     share = len(varied) / len(street_spans) if street_spans else 0.0

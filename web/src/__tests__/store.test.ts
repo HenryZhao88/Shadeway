@@ -5,9 +5,21 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { chosenRouteId, useStore, DEFAULT_ORIGIN, DEFAULT_DESTINATION } from '../state/store';
-import { ROUTE_RESPONSE, mockFetch } from './fixture';
+import { DEPARTURE_CURVE, HEALTH, ROUTE_RESPONSE, TIMESERIES, mockFetch } from './fixture';
 
 const INITIAL = useStore.getState();
+
+function holdResponse(path: string) {
+  let resolve!: (response: Response) => void;
+  const pending = new Promise<Response>((done) => { resolve = done; });
+  const fallback = mockFetch();
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).includes(path) ? pending : fallback(input, init),
+  ));
+  return (body: unknown, status = 200) => resolve(new Response(
+    JSON.stringify(body), { status },
+  ));
+}
 
 function reset() {
   useStore.setState({
@@ -44,6 +56,77 @@ afterEach(() => {
 });
 
 describe('fetchRoute', () => {
+  test('a failed recalculation preserves the chart belonging to the retained route', async () => {
+    useStore.setState({ route: ROUTE_RESPONSE, timeseries: { shadeway: TIMESERIES }, timeseriesStatus: 'ready' });
+    const finish = holdResponse('/api/route');
+    const pending = useStore.getState().fetchRoute();
+    finish({ detail: 'failed' }, 500);
+    await pending;
+    expect(useStore.getState().timeseries.shadeway).toEqual(TIMESERIES);
+    expect(useStore.getState().timeseriesStatus).toBe('ready');
+  });
+
+  test('a failed recalculation does not leave a cancelled chart request spinning', async () => {
+    useStore.setState({ route: ROUTE_RESPONSE, timeseriesStatus: 'loading' });
+    const finish = holdResponse('/api/route');
+    const pending = useStore.getState().fetchRoute();
+    finish({ detail: 'failed' }, 500);
+    await pending;
+    expect(useStore.getState().timeseriesStatus).toBe('error');
+  });
+
+  test('a route completing after an endpoint is cleared cannot restore the trip', async () => {
+    const finish = holdResponse('/api/route');
+    const pending = useStore.getState().fetchRoute();
+    useStore.getState().clearPlace('destination');
+    finish(ROUTE_RESPONSE);
+    await pending;
+
+    expect(useStore.getState().route).toBeNull();
+    expect(useStore.getState().routeStatus).toBe('idle');
+    expect(useStore.getState().timeseriesStatus).toBe('idle');
+  });
+
+  test('an obsolete error cannot overwrite the cleared planner', async () => {
+    const finish = holdResponse('/api/route');
+    const pending = useStore.getState().fetchRoute();
+    useStore.getState().clearPlace('origin');
+    finish({ detail: 'old request failed' }, 500);
+    await pending;
+
+    expect(useStore.getState().routeStatus).toBe('idle');
+    expect(useStore.getState().routeError).toBeNull();
+  });
+
+  test('waiting for a location fix invalidates an in-flight custom trip', async () => {
+    const finish = holdResponse('/api/route');
+    const pending = useStore.getState().fetchRoute();
+    useStore.getState().selectCurrentLocation();
+    finish(ROUTE_RESPONSE);
+    await pending;
+
+    expect(useStore.getState().origin).toBeNull();
+    expect(useStore.getState().route).toBeNull();
+    expect(useStore.getState().routeStatus).toBe('idle');
+  });
+
+  test('applies a profile changed while the route request was in flight', async () => {
+    const finish = holdResponse('/api/route');
+    const pending = useStore.getState().fetchRoute();
+    useStore.getState().setProfile('high_risk');
+    finish({
+      ...ROUTE_RESPONSE,
+      chosen_route_id: 'fastest',
+      frontier: [
+        { route_id: 'fastest', duration_s: 1080, mean_feels_like_c: 41 },
+        { route_id: 'shadeway', duration_s: 1380, mean_feels_like_c: 40 },
+      ],
+    });
+    await pending;
+
+    expect(chosenRouteId(useStore.getState())).toBe('shadeway');
+  });
+
   test('waits for a real start and destination instead of routing a preset', async () => {
     const spy = vi.fn(mockFetch());
     vi.stubGlobal('fetch', spy);
@@ -159,6 +242,22 @@ describe('fetchRoute', () => {
 });
 
 describe('current location', () => {
+  test('keeps the planned origin stable while a route is loading', async () => {
+    const finish = holdResponse('/api/route');
+    const initialFix = { ...DEFAULT_ORIGIN, accuracyM: 8 };
+    const nextFix = { ...initialFix, lat: initialFix.lat + 0.001 };
+    useStore.setState({ origin: initialFix, currentLocation: initialFix, originMode: 'current' });
+    const pending = useStore.getState().fetchRoute();
+    useStore.getState().updateCurrentLocation(nextFix);
+
+    expect(useStore.getState().currentLocation).toEqual(nextFix);
+    const plannedOrigin = useStore.getState().origin;
+    finish(ROUTE_RESPONSE);
+    await pending;
+    expect(plannedOrigin).toEqual(initialFix);
+    expect(useStore.getState().origin).toEqual(initialFix);
+  });
+
   test('uses the first live fix as the start and asks for a destination', () => {
     useStore.setState({
       origin: null,
@@ -206,6 +305,22 @@ describe('current location', () => {
 });
 
 describe('the scrubber split', () => {
+  test('choosing a sample during debounce plans for the time already on screen', async () => {
+    vi.useFakeTimers();
+    const later = new Date(useStore.getState().scrubAt.getTime() + 60 * 60_000);
+    const spy = vi.fn(mockFetch());
+    vi.stubGlobal('fetch', spy);
+    useStore.getState().setScrubAt(later);
+    useStore.getState().setTrip(DEFAULT_ORIGIN, DEFAULT_DESTINATION);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(useStore.getState().departAt).toEqual(later);
+    expect(useStore.getState().scrubAt).toEqual(later);
+    const requests = spy.mock.calls.filter(([url]) => String(url).endsWith('/api/route'));
+    expect(requests).toHaveLength(1);
+    expect(JSON.parse(String(requests[0]![1]?.body)).depart_iso).toBe(later.toISOString());
+  });
+
   test('setScrubAt moves the sun immediately without touching departAt', () => {
     vi.useFakeTimers();
     const before = useStore.getState().departAt.getTime();
@@ -261,6 +376,41 @@ describe('the scrubber split', () => {
   });
 });
 
+describe('departure request lifecycle', () => {
+  test('clearing an endpoint discards its pending departure curve', async () => {
+    const finish = holdResponse('/departure-curve');
+    const pending = useStore.getState().fetchDeparture();
+    useStore.getState().clearPlace('destination');
+    finish(DEPARTURE_CURVE);
+    await pending;
+    expect(useStore.getState().departure).toBeNull();
+    expect(useStore.getState().departureStatus).toBe('idle');
+  });
+
+  test('a failed re-route cannot retain the previous departure recommendation', async () => {
+    useStore.setState({ departure: DEPARTURE_CURVE, departureStatus: 'ready' });
+    const finish = holdResponse('/api/route');
+    const pending = useStore.getState().fetchRoute();
+    finish({ detail: 'new trip failed' }, 400);
+    await pending;
+    expect(useStore.getState().departure).toBeNull();
+    expect(useStore.getState().departureStatus).toBe('idle');
+  });
+
+  test('a re-route invalidates the pending departure curve immediately', async () => {
+    const finish = holdResponse('/departure-curve');
+    const pending = useStore.getState().fetchDeparture();
+    const finishRoute = holdResponse('/api/route');
+    const reroute = useStore.getState().fetchRoute();
+    finish(DEPARTURE_CURVE);
+    await pending;
+    const obsoleteDeparture = useStore.getState().departure;
+    finishRoute(ROUTE_RESPONSE);
+    await reroute;
+    expect(obsoleteDeparture).toBeNull();
+  });
+});
+
 describe('the departure the app opens on', () => {
   test('scrubAt and departAt agree, so nothing is pending at boot', () => {
     // These were two separate `new Date()` readings. Straddle a minute
@@ -276,6 +426,14 @@ describe('the departure the app opens on', () => {
 });
 
 describe('planting', () => {
+  test('refreshes authoritative cache status after planting', async () => {
+    const health = { ...HEALTH, scene_version: 2, cache_warm: false, warm_fraction: 0.98 };
+    useStore.setState({ origin: null, destination: null, health: HEALTH });
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/health': health })));
+    await useStore.getState().plant([{ lat: 40.758, lon: -73.9855 }]);
+    expect(useStore.getState().health).toEqual(health);
+  });
+
   test('does not report a routing error when there is no trip yet', async () => {
     useStore.setState({ origin: null, destination: null });
 
@@ -294,6 +452,19 @@ describe('planting', () => {
     expect(
       spy.mock.calls.filter(([url]) => String(url).endsWith('/api/route')),
     ).toHaveLength(1);
+  });
+});
+
+describe('health refreshes', () => {
+  test('an older response cannot overwrite a newer scene status', async () => {
+    const finish = holdResponse('/health');
+    const pending = useStore.getState().fetchHealth();
+    const health = { ...HEALTH, scene_version: 2 };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/health': health })));
+    await useStore.getState().fetchHealth();
+    finish(HEALTH);
+    await pending;
+    expect(useStore.getState().health).toEqual(health);
   });
 });
 

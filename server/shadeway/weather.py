@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -44,6 +45,17 @@ FALLBACK_SNAPSHOT = WeatherSnapshot(
 
 KMH_TO_MS = 1.0 / 3.6  # open-meteo's default wind unit is km/h
 GRID_DEG = 0.05  # ~5 km: one cache entry per neighbourhood, not per coordinate
+
+
+def forecast_hour(when: datetime) -> datetime:
+    """Nearest NY-local forecast hour, resolving exact half hours earlier.
+
+    This is the hourly cache boundary used by time-series cost models. Keep it
+    consistent with the nearest timestamp selection in WeatherClient.
+    """
+    local = when.astimezone(ZoneInfo("America/New_York"))
+    hour = local.replace(minute=0, second=0, microsecond=0)
+    return hour + timedelta(hours=1) if local - hour > timedelta(minutes=30) else hour
 
 
 class WeatherClient:

@@ -147,6 +147,35 @@ def test_every_leg_reports_its_side_and_its_temperature(client):
             assert len(leg.geometry) >= 2
 
 
+def test_route_geometry_follows_the_walk_in_both_directions(client):
+    import numpy as np
+
+    from shadeway.api import _state
+
+    graph = _state().graph
+    body = _body(client)
+    for origin, destination in (
+        (body["origin"], body["destination"]),
+        (body["destination"], body["origin"]),
+    ):
+        request = body | {"origin": origin, "destination": destination}
+        parsed = RouteResponse.model_validate(client.post("/api/route", json=request).json())
+        for route in parsed.routes.values():
+            node = graph.nearest_node(origin["lon"], origin["lat"])
+            for leg in route.legs:
+                following = graph.other_end(leg.edge_id, node)
+                # Fixture sidewalk ends are offset slightly from their corner
+                # nodes; the end nearest the entering node must come first.
+                start_distance = np.linalg.norm(leg.geometry[0] - graph.node_lonlat[node])
+                end_distance = np.linalg.norm(leg.geometry[-1] - graph.node_lonlat[node])
+                assert start_distance < end_distance
+                node = following
+            assert route.instructions[0].at.lon == route.legs[0].geometry[0][0]
+            assert route.instructions[0].at.lat == route.legs[0].geometry[0][1]
+            assert route.instructions[-1].at.lon == route.legs[-1].geometry[-1][0]
+            assert route.instructions[-1].at.lat == route.legs[-1].geometry[-1][1]
+
+
 def test_instructions_include_a_side_of_street_reference(client):
     parsed = RouteResponse.model_validate(
         client.post("/api/route", json=_body(client)).json()
@@ -160,6 +189,56 @@ def test_instructions_include_a_side_of_street_reference(client):
 def test_a_naive_departure_time_is_rejected(client):
     body = _body(client) | {"depart_iso": "2025-07-22T15:00:00"}
     assert client.post("/api/route", json=body).status_code == 422
+
+
+@pytest.mark.parametrize("endpoint", ["timeseries", "departure-curve", "weather"])
+def test_get_endpoints_reject_naive_datetimes(client, endpoint):
+    body = _body(client)
+    if endpoint == "timeseries":
+        parsed = client.post("/api/route", json=body).json()
+        path = f"/api/route/{parsed['chosen_route_id']}/timeseries"
+        params = {"depart_iso": "2025-07-22T15:00:00", "request_id": parsed["request_id"]}
+    elif endpoint == "departure-curve":
+        path = "/api/departure-curve"
+        params = {
+            "origin_lat": body["origin"]["lat"], "origin_lon": body["origin"]["lon"],
+            "dest_lat": body["destination"]["lat"], "dest_lon": body["destination"]["lon"],
+            "from_iso": "2025-07-22T15:00:00", "hours": 1,
+        }
+    else:
+        path = "/api/weather"
+        params = body["origin"] | {"at_iso": "2025-07-22T15:00:00"}
+    with TestClient(client.app, raise_server_exceptions=False) as errors_client:
+        response = errors_client.get(path, params=params)
+    assert response.status_code == 422
+
+
+def test_timeseries_matches_route_weather_between_hour_boundaries(client, monkeypatch):
+    from shadeway.api import _state
+    from shadeway.weather import WeatherClient
+
+    payload = {"hourly": {
+        "time": ["2025-07-22T15:00", "2025-07-22T16:00", "2025-07-22T17:00"],
+        "temperature_2m": [38, 22, 20], "relative_humidity_2m": [45] * 3,
+        "wind_speed_10m": [10] * 3, "cloud_cover": [100] * 3,
+        "direct_normal_irradiance": [0] * 3, "diffuse_radiation": [0] * 3,
+        "shortwave_radiation": [0] * 3, "uv_index": [0] * 3,
+    }}
+    weather = WeatherClient()
+    monkeypatch.setattr(weather, "_payload", lambda *_: payload)
+    monkeypatch.setattr(_state(), "weather", weather)
+    parsed = RouteResponse.model_validate(client.post(
+        "/api/route", json=_body(client) | {"depart_iso": "2025-07-22T15:45:00-04:00"}
+    ).json())
+    for route_id, route in parsed.routes.items():
+        response = client.get(f"/api/route/{route_id}/timeseries", params={
+            "request_id": parsed.request_id, "depart_iso": route.depart_iso.isoformat(),
+            "hours": 1, "step_minutes": 60,
+        })
+        assert response.status_code == 200
+        assert response.json()["points"][0]["mean_feels_like_c"] == pytest.approx(
+            route.feels_like_c.mean_c
+        )
 
 
 def test_timeseries_returns_the_whole_curve_in_one_call(client):

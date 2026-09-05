@@ -22,9 +22,9 @@ cd "$REPO_ROOT"
 [ -f "$DATA_DIR/edges.parquet" ] || {
   echo "no built city at $DATA_DIR — run 'make data' first" >&2; exit 1; }
 [ -f "$DATA_DIR/horizon.npz" ] || {
-  echo "WARNING: no horizon.npz in $DATA_DIR." >&2
-  echo "The Space will serve with a cold cache: correct, but the first route" >&2
-  echo "through each block pays for its own ray casting. 'make warm' first." >&2
+  echo "no horizon.npz in $DATA_DIR — production builds require a warmed city." >&2
+  echo "Run 'make warm OUT=$DATA_DIR' first." >&2
+  exit 1
 }
 
 command -v git-lfs >/dev/null || { echo "git-lfs required: brew install git-lfs" >&2; exit 1; }
@@ -37,6 +37,8 @@ echo "staging in $STAGE"
 cp Dockerfile .dockerignore "$STAGE/"
 cp package.json package-lock.json "$STAGE/"
 cp deploy/huggingface/README.md "$STAGE/README.md"
+mkdir -p "$STAGE/deploy"
+cp deploy/verify_city.py "$STAGE/deploy/"
 for d in contracts server web; do
   rsync -a --exclude node_modules --exclude dist --exclude '__pycache__' \
         --exclude '*.egg-info' --exclude '.pytest_cache' \

@@ -214,6 +214,40 @@ describe('letting go', () => {
 });
 
 describe('the control underneath', () => {
+  test('keyboard input interrupts a flick already in flight', () => {
+    render(<TimeScrubber />);
+    const surface = track();
+    pointer('pointerdown', surface, { clientX: xFor(9 * 60) });
+    now += 50;
+    pointer('pointermove', surface, { clientX: xFor(10 * 60) });
+    pointer('pointerup', surface);
+    runFrames(4);
+
+    fireEvent.change(screen.getByLabelText('Departure time'), {
+      target: { value: String(18 * 60) },
+    });
+    runFrames(400);
+
+    expect(scrubMinutes()).toBe(18 * 60);
+  });
+
+  test('unmounting cancels motion before it can change departure again', () => {
+    const { unmount } = render(<TimeScrubber />);
+    const surface = track();
+    pointer('pointerdown', surface, { clientX: xFor(9 * 60) });
+    now += 50;
+    pointer('pointermove', surface, { clientX: xFor(10 * 60) });
+    pointer('pointerup', surface);
+    runFrames(4);
+    const departureAtUnmount = scrubMinutes();
+
+    unmount();
+    runFrames(400);
+
+    expect(scrubMinutes()).toBe(departureAtUnmount);
+    expect(pending.size).toBe(0);
+  });
+
   test('is still a range input, and still what a keyboard drives', () => {
     render(<TimeScrubber />);
     const input = screen.getByLabelText('Departure time') as HTMLInputElement;

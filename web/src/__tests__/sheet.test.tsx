@@ -6,7 +6,7 @@
  * height the content keeps its own scrolling instead of having it stolen.
  */
 
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
@@ -54,12 +54,13 @@ function pointer(
   });
 }
 
-function Host({ initial = 'half' as Detent }) {
+function Host({ initial = 'half' as Detent, children }: { initial?: Detent; children?: React.ReactNode }) {
   const [detent, setDetent] = useState<Detent>(initial);
   return (
     <div style={{ position: 'relative' }}>
       <BottomSheet detent={detent} onDetentChange={setDetent} label="Details">
         <p>a very long list of route evidence</p>
+        {children}
       </BottomSheet>
     </div>
   );
@@ -165,6 +166,28 @@ describe('dragging', () => {
 });
 
 describe('the grip', () => {
+  test('keeps capture on the button so a pointer tap can still click it', () => {
+    render(<Host />);
+    pointer('pointerdown', grip(), 400);
+    expect(vi.mocked(Element.prototype.setPointerCapture).mock.instances[0]).toBe(grip());
+    pointer('pointerup', grip(), 400);
+    fireEvent.click(grip(), { detail: 1 });
+    runFrames();
+    expect(offset()).toBeCloseTo(STOPS.full, 0);
+  });
+
+  test('a click synthesized after dragging does not advance another detent', () => {
+    render(<Host />);
+    pointer('pointerdown', grip(), 400);
+    now += 400;
+    pointer('pointermove', grip(), 170);
+    now += 400;
+    pointer('pointerup', grip(), 170);
+    fireEvent.click(grip(), { detail: 1 });
+    runFrames();
+    expect(offset()).toBeCloseTo(STOPS.full, 0);
+  });
+
   test('advances a detent on a plain tap, so no gesture is required', () => {
     render(<Host />);
     act(() => grip().click());
@@ -187,6 +210,26 @@ describe('the grip', () => {
 });
 
 describe('scrolling versus dragging', () => {
+  test.each(['half', 'peek'] as Detent[])('controls keep their pointer at %s height', (initial) => {
+    render(<Host initial={initial}><button>Search address</button><input aria-label="Address" /></Host>);
+    const before = offset();
+    for (const element of [screen.getByRole('button', { name: 'Search address' }), screen.getByLabelText('Address')]) {
+      pointer('pointerdown', element, 400);
+      pointer('pointermove', element, 350);
+      pointer('pointerup', element, 350);
+    }
+    expect(offset()).toBe(before);
+    expect(Element.prototype.setPointerCapture).not.toHaveBeenCalled();
+  });
+
+  test('unmounting cancels a settling sheet', () => {
+    const { unmount } = render(<Host />);
+    act(() => grip().click());
+    expect(pending.size).toBeGreaterThan(0);
+    unmount();
+    expect(pending.size).toBe(0);
+  });
+
   test('below full height the whole sheet is a drag surface', () => {
     render(<Host />);
     pointer('pointerdown', content(), 400);

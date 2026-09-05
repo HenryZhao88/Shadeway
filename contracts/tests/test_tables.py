@@ -59,3 +59,24 @@ def test_validate_table_reports_all_problems_at_once():
     msg = str(exc.value)
     assert "edge_id" in msg  # wrong type
     assert "length_m" in msg  # missing column
+
+
+def test_required_columns_reject_null_values_even_with_matching_arrow_types():
+    from shadeway_contracts.fixtures import build_fixture_city
+
+    table = build_fixture_city()["edges"].slice(0, 1)
+    table = table.set_column(
+        table.schema.get_field_index("u"), "u", pa.array([None], type=pa.uint32())
+    )
+    with pytest.raises(SchemaError, match="u.*null"):
+        validate_table("edges", table)
+
+
+def test_nullable_columns_still_allow_missing_values():
+    from shadeway_contracts.fixtures import build_fixture_city
+
+    table = build_fixture_city()["edges"].slice(0, 1)
+    table = table.set_column(
+        table.schema.get_field_index("width_m"), "width_m", pa.array([None], type=pa.float32())
+    )
+    validate_table("edges", table)

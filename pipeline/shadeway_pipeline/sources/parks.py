@@ -96,7 +96,6 @@ def entrances(scope: Scope, sidewalk_geoms) -> "object":
     rather than a guess.
     """
     import geopandas as gpd
-    import shapely
     from shapely.strtree import STRtree
 
     empty = gpd.GeoDataFrame({"name": [], "geometry": []}, crs=TARGET_CRS)
@@ -115,7 +114,7 @@ def entrances(scope: Scope, sidewalk_geoms) -> "object":
         reachable = [
             point
             for point in _boundary_samples(park.geometry)
-            if len(index.query(shapely.buffer(point, SIDEWALK_REACH_M)))
+            if len(index.query(point, predicate="dwithin", distance=SIDEWALK_REACH_M))
         ]
         # cluster per park, so the cap is per park: Central Park gets eight
         # entrances, not eight hundred boundary samples

@@ -108,9 +108,18 @@ export default function Endpoints() {
     [],
   );
 
+  const dismissSearch = () => {
+    searchAbort.current?.abort();
+    searchAbort.current = null;
+    setActiveSearch(null);
+    setResults([]);
+    setSearchMessage(null);
+    setSearchStatus('idle');
+  };
+
   const trackLocation = () => {
     selectCurrentLocation();
-    setActiveSearch(null);
+    dismissSearch();
     if (currentLocation) focusCurrentLocation();
     if (watchId.current !== null) return;
     if (!navigator.geolocation) {
@@ -159,15 +168,13 @@ export default function Endpoints() {
     const selected = which === 'origin' ? origin : destination;
     if (selected && value !== selected.label) clearPlace(which);
     if (activeSearch === which) {
-      setActiveSearch(null);
-      setResults([]);
-      setSearchMessage(null);
-      setSearchStatus('idle');
+      dismissSearch();
     }
   };
 
   const submitSearch = async (which: EndpointKind, event?: FormEvent) => {
     event?.preventDefault();
+    dismissSearch();
     const query = draft[which].trim();
     setActiveSearch(which);
     setResults([]);
@@ -177,7 +184,6 @@ export default function Endpoints() {
       setSearchMessage('Enter at least two characters to search.');
       return;
     }
-    searchAbort.current?.abort();
     const controller = new AbortController();
     searchAbort.current = controller;
     setSearchStatus('loading');
@@ -193,7 +199,7 @@ export default function Endpoints() {
         );
       }
     } catch (error) {
-      if ((error as Error)?.name === 'AbortError') return;
+      if (controller.signal.aborted || (error as Error)?.name === 'AbortError') return;
       setSearchStatus('error');
       setSearchMessage(
         error instanceof Error ? error.message : 'Place search failed. Try again.',
@@ -204,19 +210,16 @@ export default function Endpoints() {
   const chooseResult = (which: EndpointKind, result: GeocodeResult) => {
     setDraft((current) => ({ ...current, [which]: result.label }));
     setPlace(which, { label: result.label, lat: result.lat, lon: result.lon });
-    setActiveSearch(null);
-    setResults([]);
-    setSearchStatus('idle');
-    setSearchMessage(null);
+    dismissSearch();
   };
 
   const chooseOnMap = (which: EndpointKind) => {
-    setActiveSearch(null);
+    dismissSearch();
     setPickMode(pickMode === which ? 'none' : which);
   };
 
   const swap = () => {
-    setActiveSearch(null);
+    dismissSearch();
     swapEnds();
   };
 
@@ -382,15 +385,16 @@ export default function Endpoints() {
               type="button"
               key={preset.label}
               className="chip"
-              onClick={() =>
+              onClick={() => {
+                dismissSearch();
                 setTrip(
                   preset.from,
                   preset.to,
                   preset.demoHour == null
                     ? undefined
                     : nextDemoDeparture(preset.demoHour),
-                )
-              }
+                );
+              }}
             >
               {preset.label}
             </button>

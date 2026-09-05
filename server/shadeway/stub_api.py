@@ -9,10 +9,11 @@ from __future__ import annotations
 import math
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import AwareDatetime
 
 from shadeway_contracts.api import (
     DepartureCurveResponse,
@@ -83,7 +84,7 @@ def route(req: RouteRequest) -> RouteResponse:
 @app.get("/api/route/{route_id}/timeseries", response_model=TimeseriesResponse)
 def timeseries(
     route_id: str,
-    depart_iso: datetime,
+    depart_iso: AwareDatetime,
     step_minutes: int = Query(default=5, ge=1, le=60),
 ) -> TimeseriesResponse:
     base = example_route_response().routes.get(route_id)
@@ -105,7 +106,7 @@ def timeseries(
 @app.get("/api/departure-curve", response_model=DepartureCurveResponse)
 def departure_curve(
     origin_lat: float, origin_lon: float, dest_lat: float, dest_lon: float,
-    from_iso: datetime, hours: int = Query(default=4, ge=1, le=12),
+    from_iso: AwareDatetime, hours: int = Query(default=4, ge=1, le=12),
 ) -> DepartureCurveResponse:
     steps = hours * 4  # 15-minute resolution, per the spec
     points = [
@@ -122,7 +123,11 @@ def departure_curve(
 
 
 @app.get("/api/weather", response_model=WeatherSnapshot)
-def weather(lat: float, lon: float, at_iso: datetime) -> WeatherSnapshot:
+def weather(
+    lat: float = Query(ge=-90, le=90),
+    lon: float = Query(ge=-180, le=180),
+    at_iso: AwareDatetime = Query(),
+) -> WeatherSnapshot:
     return example_route_response().weather.model_copy(update={"observed_iso": at_iso})
 
 

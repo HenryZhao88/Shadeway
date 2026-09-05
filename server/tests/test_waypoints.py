@@ -106,6 +106,24 @@ def test_hot_walk_earns_a_stop_at_the_fountain_it_passes():
     assert found[0].detour_s < waypoints.DETOUR_BUDGET_S
 
 
+def test_reverse_walk_searches_for_amenities_at_the_end_actually_reached():
+    from pyproj import Transformer
+
+    from shadeway_contracts.tables import CRS_EPSG
+
+    graph = FakeGraph(2, spacing_m=1000.0)
+    route = _route(36.0, n_legs=2)
+    to_ll = Transformer.from_crs(f"EPSG:{CRS_EPSG}", "EPSG:4326", always_xy=True)
+    first = route.legs[0].model_copy(update={
+        "geometry": [to_ll.transform(750.0, 0.0), to_ll.transform(0.0, 0.0)]
+    })
+    route = route.model_copy(update={"legs": [first, route.legs[1]]})
+    found = waypoints.suggest(route, _index(0.0), graph, load_threshold_dm=1.0)
+    assert len(found) == 1
+    assert found[0].inserted_after_leg == 0
+    assert found[0].detour_s == pytest.approx(0.0)
+
+
 def test_amenity_out_of_detour_budget_is_not_suggested():
     graph = FakeGraph(8)
     far = waypoints.DETOUR_BUDGET_S * 1.35  # well past the round-trip budget

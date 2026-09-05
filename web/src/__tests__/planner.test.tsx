@@ -105,6 +105,38 @@ describe('on a phone, once a route exists', () => {
 });
 
 describe('route planner', () => {
+  test('editing a pending search aborts its obsolete request', async () => {
+    let signal: AbortSignal | null | undefined;
+    vi.stubGlobal('fetch', vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      signal = init?.signal;
+      return new Promise<Response>(() => {});
+    }));
+    render(<Endpoints />);
+    await userEvent.type(screen.getByLabelText('Starting point'), 'Times Square');
+    await userEvent.click(screen.getByRole('button', { name: 'Search for starting point' }));
+    expect(signal?.aborted).toBe(false);
+
+    await userEvent.type(screen.getByLabelText('Starting point'), ' West');
+
+    expect(signal?.aborted).toBe(true);
+    expect(screen.queryByText('Searching Manhattan…')).not.toBeInTheDocument();
+  });
+
+  test('a superseded search failure cannot replace the current search status', async () => {
+    const requests: { resolve: (response: Response) => void }[] = [];
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => requests.push({ resolve }))));
+    render(<Endpoints />);
+    await userEvent.type(screen.getByLabelText('Starting point'), 'Times Square');
+    await userEvent.click(screen.getByRole('button', { name: 'Search for starting point' }));
+    await userEvent.type(screen.getByLabelText('Destination'), 'Bryant Park');
+    await userEvent.click(screen.getByRole('button', { name: 'Search for destination' }));
+
+    await act(async () => requests[0]!.resolve(new Response(JSON.stringify({ detail: 'Old search failed' }), { status: 500 })));
+
+    expect(screen.getByText('Searching Manhattan…')).toBeInTheDocument();
+    expect(screen.queryByText('Old search failed')).not.toBeInTheDocument();
+  });
+
   test('opens without silently calculating a sample route', () => {
     render(<Endpoints />);
 

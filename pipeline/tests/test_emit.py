@@ -76,3 +76,14 @@ def test_nodes_get_lonlat_for_the_api_boundary(tiny_city):
     lats = tables["nodes"].column("lat").to_pylist()
     assert all(-75 < v < -73 for v in lons)
     assert all(40 < v < 41 for v in lats)
+
+
+def test_build_handles_a_scope_with_no_census_trees(tiny_city, monkeypatch):
+    trees = gpd.GeoDataFrame(
+        {"species": [], "dbh_cm": []}, geometry=[], crs=TARGET_CRS
+    )
+    monkeypatch.setattr(emit.trees_src, "load", lambda scope: trees)
+    tables = emit.build_tables(SCOPES["midtown"])
+    assert tables["trees"].num_rows == 0
+    for name, table in tables.items():
+        validate_table(name, table)

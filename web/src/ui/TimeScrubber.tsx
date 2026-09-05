@@ -20,7 +20,7 @@
  * screen readers and arrow keys talk to — it just no longer owns the pointer.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { project, rubberband, VelocityTracker } from '../motion/gesture';
 import { createSpring, SPRING, type Spring } from '../motion/spring';
@@ -149,8 +149,15 @@ export default function TimeScrubber() {
     });
   }
 
+  // Stop, rather than dispose, so StrictMode's effect replay can reuse them.
+  useEffect(() => () => {
+    settle.current?.stop();
+    slack.current?.stop();
+  }, []);
+
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (gesture.current) return;
     const element = trackRef.current;
     if (!element) return;
 
@@ -315,6 +322,8 @@ export default function TimeScrubber() {
           step={STEP_MINUTES}
           value={minutesNow}
           onChange={(event) => {
+            settle.current!.stop();
+            slack.current!.set(0);
             const minute = Number(event.target.value);
             position.current = minute;
             setScrubAt(withMinutesIntoDay(scrubAt, minute));
