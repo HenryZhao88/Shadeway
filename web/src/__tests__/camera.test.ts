@@ -7,6 +7,7 @@ import {
   buildingLevels,
   fitRoute,
   renderBudget,
+  sunReference,
   type ViewState,
 } from '../map/camera';
 
@@ -27,16 +28,56 @@ describe('map camera building policy', () => {
     });
   });
 
-  test('swaps overview and exact buildings without overlapping them', () => {
+  // The detail set belongs to the viewport it was fetched for. A pan or a
+  // zoom exposes ground it does not cover, and the request for that ground
+  // takes a settle delay plus a round trip to arrive. Dropping the overview
+  // the moment any detail exists left that ground bare for the whole wait.
+  test('keeps the overview under exact detail, so new ground is never bare', () => {
     const overview = ['overview'];
     const detail = ['detail'];
     expect(buildingLevels(true, overview, detail)).toEqual({
-      overview: [],
+      overview,
       detail,
     });
-    expect(buildingLevels(false, overview, detail)).toEqual({
-      overview,
+  });
+
+  test('drops exact detail below the detail zoom', () => {
+    expect(buildingLevels(false, ['overview'], ['detail'])).toEqual({
+      overview: ['overview'],
       detail: [],
+    });
+  });
+
+  // The overview never changes once loaded. Handing deck.gl the same array
+  // every time is what stops it re-tessellating 44k prisms on a level swap.
+  test('passes the overview through by reference', () => {
+    const overview = ['overview'];
+    expect(buildingLevels(true, overview, ['detail']).overview).toBe(overview);
+    expect(buildingLevels(false, overview, ['detail']).overview).toBe(overview);
+  });
+
+  // Shadows are rebuilt whenever the sun moves, and the sun moved on every
+  // frame of a pan because it was read from the exact camera centre. Over a
+  // city the sun is the same sun, so the reference point is quantised and a
+  // pan recomputes nothing.
+  describe('sun reference', () => {
+    test('does not move while the camera pans across a neighbourhood', () => {
+      const a = sunReference({ ...OVERVIEW, longitude: -73.9812, latitude: 40.745 });
+      const b = sunReference({ ...OVERVIEW, longitude: -73.9769, latitude: 40.7481 });
+      expect(b).toEqual(a);
+    });
+
+    test('stays within a fraction of a degree of the camera', () => {
+      const view = { ...OVERVIEW, longitude: -73.9812, latitude: 40.745 };
+      const reference = sunReference(view);
+      expect(Math.abs(reference.longitude - view.longitude)).toBeLessThan(0.05);
+      expect(Math.abs(reference.latitude - view.latitude)).toBeLessThan(0.05);
+    });
+
+    test('follows the camera across the city', () => {
+      const here = sunReference({ ...OVERVIEW, longitude: -73.98, latitude: 40.74 });
+      const there = sunReference({ ...OVERVIEW, longitude: -73.78, latitude: 40.64 });
+      expect(there).not.toEqual(here);
     });
   });
 

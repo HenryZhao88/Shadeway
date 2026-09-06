@@ -27,16 +27,50 @@ export function renderBudget(view: ViewState): MapRenderBudget {
   return { buildingLoad: { maxFeatures: 450, complete: true }, showShadows: true };
 }
 
-/** Choose exactly one building level. Street geometry replaces overview
- * geometry only after it exists, preventing both an empty zoom band and
- * overlapping roofs during the handoff. */
+/** Which building levels to draw.
+ *
+ * The overview is the whole city and never changes, so it stays mounted at
+ * every zoom and the exact street geometry is drawn on top of it. It used to
+ * be dropped the moment any detail existed, which looked right only while the
+ * two agreed about the same ground: the detail set belongs to the viewport it
+ * was fetched for, so every pan and every zoom exposed blocks it does not
+ * cover, and those blocks stayed bare for a settle delay plus a round trip.
+ * On a slow connection that is seconds of empty city under the camera.
+ *
+ * Keeping one array mounted for the life of the session also spares deck.gl
+ * the ~100 ms it spends re-tessellating 44k prisms every time the level would
+ * otherwise have swapped — a hitch that landed on exactly the frames where a
+ * newly arrived detail payload needed the main thread.
+ *
+ * layers.ts sinks the overview prisms by a fixed epsilon so a roof drawn twice
+ * cannot z-fight. */
 export function buildingLevels<T>(
   wantsDetail: boolean,
   overview: T[],
   detail: T[],
 ): { overview: T[]; detail: T[] } {
-  if (wantsDetail && detail.length) return { overview: [], detail };
-  return { overview, detail: [] };
+  return { overview, detail: wantsDetail ? detail : [] };
+}
+
+/** Degrees. Coarse enough that panning a neighbourhood never crosses a cell,
+ * fine enough that the reference stays inside the city you are looking at. */
+const SUN_REFERENCE_STEP_DEG = 0.05;
+
+/** Where to stand to compute the sun.
+ *
+ * Reading it from the exact camera centre made the solar position — and with
+ * it every shadow polygon on screen — a new value on every frame of a pan,
+ * so the client rebuilt thousands of convex hulls and deck.gl re-tessellated
+ * thousands of polygons sixty times a second, for a sun that had moved by a
+ * hundredth of a degree. Quantising the reference point costs under 0.03° of
+ * azimuth (a decimetre at the end of a long shadow) and makes a pan free. */
+export function sunReference(view: ViewState): {
+  longitude: number;
+  latitude: number;
+} {
+  const quantise = (value: number) =>
+    Math.round(value / SUN_REFERENCE_STEP_DEG) * SUN_REFERENCE_STEP_DEG;
+  return { longitude: quantise(view.longitude), latitude: quantise(view.latitude) };
 }
 
 export function fitRoute(

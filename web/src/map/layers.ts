@@ -128,9 +128,15 @@ export function buildingLayer(buildings: BuildingFootprint[]) {
   });
 }
 
-/** Lightweight simplified-footprint prisms for continuous city context. MapCanvas
- * keeps this level visible until the exact street-detail layer is ready, then
- * swaps both layers in one render so there is never an empty city. */
+/** Metres. The overview and the exact layer describe the same buildings at the
+ *  same heights, so their roofs are coplanar and would z-fight wherever both
+ *  are drawn. Sinking the overview by less than a step guarantees the exact
+ *  roof wins the depth test, and is far below what a roof line can show. */
+const BUILDING_OVERVIEW_SINK_M = 0.6;
+
+/** Lightweight simplified-footprint prisms for continuous city context. This
+ * level stays mounted at every zoom — see buildingLevels in camera.ts — so the
+ * city under the camera is never empty while exact geometry is in flight. */
 export function buildingOverviewLayer(buildings: BuildingFootprint[]) {
   return new PolygonLayer<BuildingFootprint>({
     id: 'building-overview',
@@ -139,7 +145,7 @@ export function buildingOverviewLayer(buildings: BuildingFootprint[]) {
     filled: true,
     stroked: false,
     getPolygon: (d) => d.polygon,
-    getElevation: (d) => d.height_m,
+    getElevation: (d) => Math.max(0, d.height_m - BUILDING_OVERVIEW_SINK_M),
     getFillColor: BUILDING_OVERVIEW_FILL,
     material: false,
     pickable: false,

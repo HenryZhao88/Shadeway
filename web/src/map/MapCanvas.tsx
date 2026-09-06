@@ -23,6 +23,7 @@ import {
   buildingLevels,
   fitRoute,
   renderBudget,
+  sunReference,
   type ViewState,
 } from './camera';
 import {
@@ -127,13 +128,24 @@ export default function MapCanvas() {
   // The sun, from the same client-side solar code the readouts use. Dragging
   // the scrubber recomputes this and the shadows below at frame rate, without
   // a single request.
+  //
+  // Read from a quantised reference rather than the exact camera centre. The
+  // exact centre changes on every frame of a pan, so every one of those frames
+  // rebuilt the whole shadow set and handed deck.gl a new array to
+  // re-tessellate — tens of milliseconds a frame chasing a sun that had not
+  // moved, on the same main thread the incoming building payload needs.
+  //
+  // The memos below hang off the quantised numbers and never off viewState:
+  // that object is new every frame, so memoising on it would keep nothing.
+  const solarOrigin = sunReference(viewState);
   const sun = useMemo(
-    () => sunPosition(scrubAt, viewState.latitude, viewState.longitude),
-    [scrubAt, viewState.latitude, viewState.longitude],
+    () => sunPosition(scrubAt, solarOrigin.latitude, solarOrigin.longitude),
+    [scrubAt, solarOrigin.latitude, solarOrigin.longitude],
   );
   const shadows = useMemo(
-    () => (budget.showShadows ? shadowPolygons(buildings, sun, viewState.latitude) : []),
-    [budget.showShadows, buildings, sun, viewState.latitude],
+    () =>
+      budget.showShadows ? shadowPolygons(buildings, sun, solarOrigin.latitude) : [],
+    [budget.showShadows, buildings, sun, solarOrigin.latitude],
   );
 
   const requestViewportData = useCallback(
