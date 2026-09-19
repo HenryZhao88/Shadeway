@@ -46,7 +46,10 @@ def building_horizon_deg(scene: Scene, x: float, y: float, azimuth_deg: float) -
         distance = shapely.distance(shapely.points(x, y), crossing)
         if distance <= 0.01:
             return 90.0  # we are inside the footprint
-        top = float(scene.building_bases_m[index] + scene.building_heights_m[index])
+        # height_m is measured from the building's own ground. base_m is that
+        # ground's elevation above sea level, and the pedestrian stands on the
+        # same ground, so adding it would raise every roof by the terrain.
+        top = float(scene.building_heights_m[index])
         angle = np.degrees(np.arctan((top - EYE_HEIGHT_M) / distance))
         best = max(best, float(angle))
     return max(0.0, best)
@@ -98,9 +101,8 @@ def building_horizon_profile(
 
     origin = shapely.points(np.full(len(crossings), x), np.full(len(crossings), y))
     distance = np.asarray(shapely.distance(origin, crossings))
-    tops = (
-        scene.building_bases_m[geom_idx] + scene.building_heights_m[geom_idx]
-    ).astype(np.float64)
+    # Height above local ground only — see building_horizon_deg.
+    tops = scene.building_heights_m[geom_idx].astype(np.float64)
     inside = distance <= 0.01  # we are inside the footprint: blocked fully
     with np.errstate(divide="ignore", invalid="ignore"):
         angle = np.where(

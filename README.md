@@ -127,10 +127,10 @@ sharing widely. Wants a domain and Caddy or certbot.
 **The horizon cache is now source-identified and compact.** Canopy
 transmissivity is quantised to `uint8` (maximum error below 0.002), cutting the
 Manhattan cache allocation from 225 MB to 113 MB. New `horizon.npz` files carry
-a fingerprint of every shade input and stale artifacts are rejected. The
-loader can still read the existing legacy artifact when its timestamps prove
-it follows the source parquet, so this change does not force an hour-long
-re-warm immediately.
+a fingerprint of every shade input and stale artifacts are rejected.
+Unfingerprinted legacy caches are no longer accepted: cache format 3 stopped
+adding each building's ground elevation above sea level to its roof height,
+so every earlier cache overstates shade and needs `make warm`.
 
 **The Hugging Face path is built but never exercised end to end.**
 `deploy/push-to-hf.sh` and the Space card are written and the amd64 image is

@@ -68,9 +68,10 @@ request-time headroom.
 
 Tau is stored as `uint8`: the maximum quantisation error is 0.5/255, below
 0.002, while the source values are only supported to roughly two decimal
-places. New cache files fingerprint the shade inputs. The loader accepts the
-existing legacy Manhattan cache only when its mtime is newer than those inputs,
-then quantises it in memory; the next `make warm` writes the new format.
+places. Cache files fingerprint the shade inputs and the cache format
+version, and the loader accepts nothing else. Format 3 measures buildings from
+their own ground rather than from sea level, so any cache written before it
+must be re-warmed with `make warm`.
 
 ## Warming, and when to do it
 

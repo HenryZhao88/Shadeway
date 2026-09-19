@@ -31,6 +31,22 @@ def test_horizon_angle_matches_simple_trigonometry():
     assert abs(angle - expected) < 1.5
 
 
+def test_ground_elevation_does_not_make_a_building_taller():
+    """base_m is the ground's height above sea level (NYC `ground_elevation`),
+    and the pedestrian stands on that same ground. A 40 m building on a hill is
+    still 40 m tall to someone at its foot."""
+    flat = _one_building(40.0)
+    hill = _one_building(40.0)
+    hill.building_bases_m = np.array([35.0], dtype=np.float32)
+    assert occluder.building_horizon_deg(
+        hill, 0.0, 0.0, 0.0
+    ) == occluder.building_horizon_deg(flat, 0.0, 0.0, 0.0)
+    assert np.array_equal(
+        occluder.building_horizon_profile(hill, 0.0, 0.0),
+        occluder.building_horizon_profile(flat, 0.0, 0.0),
+    )
+
+
 def test_no_obstruction_in_the_opposite_direction():
     scene = _one_building(40.0)
     assert occluder.building_horizon_deg(scene, 0.0, 0.0, azimuth_deg=180.0) == 0.0

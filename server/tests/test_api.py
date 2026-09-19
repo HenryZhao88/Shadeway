@@ -634,7 +634,7 @@ def test_buildings_come_back_tallest_first(client):
         params={"bbox": f"{lon - 0.05},{lat - 0.05},{lon + 0.05},{lat + 0.05}"},
     ).json()
 
-    tops = [b["height_m"] + b["base_m"] for b in payload["buildings"]]
+    tops = [b["height_m"] for b in payload["buildings"]]
     assert tops == sorted(tops, reverse=True)
 
 
@@ -843,3 +843,112 @@ def test_timeseries_builds_one_model_per_hour_not_per_step(client, monkeypatch):
     )
     # 17 steps across 5 distinct hours
     assert len(calls) <= 6, f"{len(calls)} weather lookups for 5 hours"
+
+
+def test_exposure_fractions_never_round_past_one():
+    """A fully sunlit route averages f_sun=1.0 over length weights that sum to
+    1 +/- an ulp. 1.0000000000000002 fails Exposure's le=1 and turned the
+    whole /api/route response into a 500."""
+    import numpy as np
+
+    from shadeway.api import _weighted_fraction
+    from shadeway_contracts.api import Exposure
+
+    rng = np.random.default_rng(0)
+    for _ in range(2000):
+        lengths = rng.uniform(5, 150, rng.integers(3, 60))
+        weights = lengths / lengths.sum()
+        ones = _weighted_fraction(np.ones_like(weights), weights)
+        assert ones <= 1.0
+        Exposure(sun_fraction=ones, mean_svf=ones, canopy_fraction=ones)
+    assert _weighted_fraction(np.zeros(3), np.full(3, 1 / 3)) == 0.0
+
+
+def _sweep_args(hours=4):
+    from datetime import datetime
+
+    from shadeway.api import _state
+
+    state = _state()
+    lon0, lat0 = state.graph.node_lonlat[0]
+    lon1, lat1 = state.graph.node_lonlat[30]
+    return {
+        "origin_lat": float(lat0), "origin_lon": float(lon0),
+        "dest_lat": float(lat1), "dest_lon": float(lon1),
+        "from_iso": datetime(2025, 7, 22, 15, 0, tzinfo=EDT),
+        "hours": hours, "walk_speed_ms": 1.35,
+    }
+
+
+@pytest.fixture
+def counted_solve(client, monkeypatch):
+    """A fresh departure cache and a solve() that counts its calls."""
+    from collections import OrderedDict
+
+    from shadeway import api
+
+    monkeypatch.setattr(api, "_DEPARTURE_CACHE", OrderedDict())
+    real = api.timedep.solve
+    calls = []
+
+    def solve(*args, **kwargs):
+        calls.append(args[3])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(api.timedep, "solve", solve)
+    return calls
+
+
+def test_a_cancelled_sweep_stops_and_is_not_cached(counted_solve):
+    import threading
+
+    from shadeway import api
+
+    cancel = threading.Event()
+    cancel.set()
+    with pytest.raises(api.SweepCancelled):
+        api._departure_curve_sync(**_sweep_args(), cancel=cancel)
+    assert counted_solve == []
+    assert not api._DEPARTURE_CACHE
+
+
+def test_an_identical_sweep_is_answered_from_cache(counted_solve):
+    import threading
+
+    from shadeway import api
+
+    first = api._departure_curve_sync(**_sweep_args(1), cancel=threading.Event())
+    searched = len(counted_solve)
+    assert searched == 4
+    again = api._departure_curve_sync(**_sweep_args(1), cancel=threading.Event())
+    assert again == first
+    assert len(counted_solve) == searched, "cache hit must not re-route"
+
+
+def test_a_disconnected_client_stops_the_sweep_between_departures(
+    counted_solve, monkeypatch
+):
+    """The browser aborts a sweep whenever the reader scrubs on. The handler
+    must notice and stop, not grind through every remaining departure."""
+    import asyncio
+    import time
+
+    from shadeway import api
+
+    real = api.timedep.solve
+
+    def slow(*args, **kwargs):
+        time.sleep(0.05)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(api.timedep, "solve", slow)
+
+    class GoneRequest:
+        async def is_disconnected(self):
+            return True
+
+    with pytest.raises(api.HTTPException) as caught:
+        asyncio.run(api.departure_curve(GoneRequest(), **_sweep_args(12)))
+    assert caught.value.status_code == 499
+    assert len(counted_solve) < 48, "the whole 12-hour sweep ran anyway"
+    assert not api._DEPARTURE_CACHE

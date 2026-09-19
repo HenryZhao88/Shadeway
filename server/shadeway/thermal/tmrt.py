@@ -154,10 +154,14 @@ def _absorbed_wm2(radiation, f_sun, svf, ground_albedo, wall_albedo):
         0.5 * svf * radiation.diffuse_wm2
         + 0.5 * non_sky * wall_albedo * radiation.global_horizontal_wm2
     )
+    # One weight per face: the six sum to 1.0. SOLWEIG's (Kdown+Kup)*Fup is
+    # the same thing, since Fup applies to each face; weighting the pair by
+    # up+down counted both faces twice and pushed every Tmrt ~5 C high.
     w = ANGULAR_WEIGHTS
     shortwave = HUMAN_ABSORPTIVITY_SW * (
         direct_cyl
-        + (k_down + k_up) * (w["up"] + w["down"])
+        + k_down * w["up"]
+        + k_up * w["down"]
         + 4.0 * k_side * w["north"]
     )
 
@@ -175,7 +179,8 @@ def _absorbed_wm2(radiation, f_sun, svf, ground_albedo, wall_albedo):
     l_down_face = surf_lw
     l_side = 0.5 * (svf * sky_lw + non_sky * surf_lw) + 0.5 * surf_lw
     longwave = HUMAN_EMISSIVITY_LW * (
-        (l_up_face + l_down_face) * (w["up"] + w["down"])
+        l_up_face * w["up"]
+        + l_down_face * w["down"]
         + 4.0 * l_side * w["north"]
     )
     return shortwave + longwave

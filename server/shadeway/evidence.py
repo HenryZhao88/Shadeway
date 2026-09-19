@@ -152,10 +152,8 @@ class EvidenceProvider:
             distance = float(shapely.distance(shapely.points(x, y), crossing))
             if distance <= 0.01:
                 continue  # standing inside a footprint: not a useful answer
-            top = float(
-                self.scene.building_bases_m[index]
-                + self.scene.building_heights_m[index]
-            )
+            # height above local ground, as occluder.building_horizon_deg
+            top = float(self.scene.building_heights_m[index])
             angle = float(
                 np.degrees(np.arctan((top - occluder.EYE_HEIGHT_M) / distance))
             )
@@ -164,9 +162,8 @@ class EvidenceProvider:
         return best_index
 
     def _describe_building(self, index: int) -> str:
-        height = float(
-            self.scene.building_bases_m[index] + self.scene.building_heights_m[index]
-        )
+        # base_m is ground elevation above sea level, not part of the building
+        height = float(self.scene.building_heights_m[index])
         noun = "tower" if height >= TOWER_HEIGHT_M else "building"
         street = self._street_near(self.scene.building_geoms[index])
         if street:

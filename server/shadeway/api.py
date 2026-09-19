@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import struct
 import threading
@@ -16,10 +17,11 @@ from pathlib import Path
 
 import numpy as np
 import shapely
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import AwareDatetime
 from pyproj import Transformer
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.gzip import GZipMiddleware
 
 from shadeway import instructions as instr
@@ -27,7 +29,7 @@ from shadeway import waypoints as waypoints_mod
 from shadeway.cost import EdgeCostModel
 from shadeway.evidence import EvidenceProvider
 from shadeway.geocoder import ATTRIBUTION, Geocoder, GeocoderUnavailable
-from shadeway.horizon import FINGERPRINT_FILES, HorizonCache, source_fingerprint
+from shadeway.horizon import HorizonCache, source_fingerprint
 from shadeway.router import timedep
 from shadeway.router.graph import Graph
 from shadeway.scene import Scene
@@ -121,13 +123,10 @@ class AppState:
         )
         precomputed = data_dir / "horizon.npz"
         if precomputed.exists():
-            # Original caches predate embedded fingerprints. They remain safe
-            # only when they are newer than every parquet that affects shade;
-            # all newly written caches use the exact hash instead.
-            legacy_ok = precomputed.stat().st_mtime_ns >= max(
-                (data_dir / name).stat().st_mtime_ns for name in FINGERPRINT_FILES
-            )
-            if horizon.load_precomputed(precomputed, legacy_ok=legacy_ok):
+            # Only fingerprinted caches are trusted. Unfingerprinted legacy
+            # files all predate CACHE_FORMAT_VERSION 3 and carry roofs raised
+            # by ground elevation, however new their timestamp.
+            if horizon.load_precomputed(precomputed):
                 print(f"loaded warm horizon cache from {precomputed}")
             else:
                 print(f"horizon cache at {precomputed} did not match the scene; "
@@ -319,6 +318,15 @@ def _evidence(origin_lonlat) -> EvidenceProvider:
     )
 
 
+def _weighted_fraction(values: np.ndarray, weights: np.ndarray) -> float:
+    """A length-weighted mean of values in [0, 1], kept in [0, 1].
+
+    The normalised weights sum to 1 only to within an ulp, so an all-ones
+    route can come out as 1.0000000000000002 — which fails Exposure's le=1
+    and turns the whole route response into a 500."""
+    return float(np.clip(np.sum(values * weights), 0.0, 1.0))
+
+
 def _to_route(
     path, route_id: str, label: str, depart: datetime, model, evidence=None
 ) -> Route:
@@ -350,9 +358,9 @@ def _to_route(
             p90_c=float(np.percentile(feels, 90)),
         ),
         exposure=Exposure(
-            sun_fraction=float(np.sum(f_sun_arr * weights)),
-            mean_svf=float(np.sum(svf_arr * weights)),
-            canopy_fraction=float(np.sum(canopy_arr * weights)),
+            sun_fraction=_weighted_fraction(f_sun_arr, weights),
+            mean_svf=_weighted_fraction(svf_arr, weights),
+            canopy_fraction=_weighted_fraction(canopy_arr, weights),
         ),
         legs=legs,
         instructions=instr.build(_state().graph, path, legs, evidence),
@@ -546,15 +554,37 @@ def _timeseries_locked(
     return TimeseriesResponse(route_id=route_id, points=points)
 
 
+# A sweep is 4-48 full route searches. The client aborts one whenever the
+# reader scrubs on, but an aborted fetch does not stop a sync handler, so every
+# superseded sweep used to run to completion and queue ahead of the one that
+# mattered. Three guards: the handler notices the disconnect and stops between
+# departures; only one sweep computes at a time (they are GIL-bound, so two at
+# once only halves both); and a finished sweep is reused for identical asks.
+DISCONNECT_POLL_S = 0.1
+DEPARTURE_CACHE_TTL_S = 600.0  # inside the weather client's own 15 min TTL
+DEPARTURE_CACHE_MAX = 32
+_SWEEP_SLOT = threading.BoundedSemaphore(1)
+_DEPARTURE_CACHE: "OrderedDict[tuple, tuple[float, DepartureCurveResponse]]" = (
+    OrderedDict()
+)
+_DEPARTURE_CACHE_LOCK = threading.Lock()
+
+
+class SweepCancelled(Exception):
+    """The caller went away; the partial sweep is discarded, never cached."""
+
+
 @app.get("/api/departure-curve", response_model=DepartureCurveResponse)
-def departure_curve(
+async def departure_curve(
+    request: Request,
     origin_lat: float, origin_lon: float, dest_lat: float, dest_lon: float,
     from_iso: AwareDatetime, hours: int = Query(default=4, ge=1, le=12),
     walk_speed_ms: float = Query(default=1.35, gt=0.3, le=3.0),
 ) -> DepartureCurveResponse:
-    state = _state()
-    with state.runtime_lock.read():
-        return _departure_curve_locked(
+    cancel = threading.Event()
+    work = asyncio.ensure_future(
+        run_in_threadpool(
+            _departure_curve_sync,
             origin_lat,
             origin_lon,
             dest_lat,
@@ -562,8 +592,57 @@ def departure_curve(
             from_iso,
             hours,
             walk_speed_ms,
-            state,
+            cancel,
         )
+    )
+    try:
+        while True:
+            done, _ = await asyncio.wait({work}, timeout=DISCONNECT_POLL_S)
+            if done:
+                break
+            if await request.is_disconnected():
+                cancel.set()
+                break
+        try:
+            return await work
+        except SweepCancelled:
+            raise HTTPException(499, "client closed the request") from None
+    finally:
+        # Also covers the handler itself being cancelled (shutdown).
+        cancel.set()
+
+
+def _departure_curve_sync(
+    origin_lat: float,
+    origin_lon: float,
+    dest_lat: float,
+    dest_lon: float,
+    from_iso: datetime,
+    hours: int,
+    walk_speed_ms: float,
+    cancel: threading.Event,
+) -> DepartureCurveResponse:
+    state = _state()
+    # Wait for the slot OUTSIDE the scene lock, so a queue of sweeps never holds
+    # up a planting write, and stay cancellable while waiting.
+    while not _SWEEP_SLOT.acquire(timeout=DISCONNECT_POLL_S):
+        if cancel.is_set():
+            raise SweepCancelled
+    try:
+        with state.runtime_lock.read():
+            return _departure_curve_locked(
+                origin_lat,
+                origin_lon,
+                dest_lat,
+                dest_lon,
+                from_iso,
+                hours,
+                walk_speed_ms,
+                state,
+                cancel,
+            )
+    finally:
+        _SWEEP_SLOT.release()
 
 
 def _departure_curve_locked(
@@ -575,6 +654,7 @@ def _departure_curve_locked(
     hours: int,
     walk_speed_ms: float,
     state: AppState,
+    cancel: threading.Event | None = None,
 ) -> DepartureCurveResponse:
     """Re-route at 15-minute departures across the window. The horizon cache
     makes each search an array-lookup exercise; the searches share nothing —
@@ -598,10 +678,30 @@ def _departure_curve_locked(
     destination = graph.nearest_node(dest_lon, dest_lat)
     if origin == destination:
         raise HTTPException(400, "origin and destination resolve to the same node")
+
+    # Planting bumps the scene version, so a new crown is never answered from
+    # a curve computed before it existed.
+    cache_key = (
+        origin,
+        destination,
+        from_iso.timestamp(),
+        hours,
+        walk_speed_ms,
+        state.scene.version,
+    )
+    now = time.monotonic()
+    with _DEPARTURE_CACHE_LOCK:
+        cached = _DEPARTURE_CACHE.get(cache_key)
+        if cached is not None and now - cached[0] < DEPARTURE_CACHE_TTL_S:
+            _DEPARTURE_CACHE.move_to_end(cache_key)
+            return cached[1]
+
     steps = hours * 4  # 15-minute resolution, per the spec
     departures = [from_iso + timedelta(minutes=15 * i) for i in range(steps)]
 
     def one(depart: datetime) -> DeparturePoint | None:
+        if cancel is not None and cancel.is_set():
+            return None  # the caller left; skip the rest of the sweep
         try:
             model = _cost_model((origin_lon, origin_lat), depart, walk_speed_ms)
             paths = timedep.solve(graph, origin, destination, depart, model)
@@ -629,6 +729,8 @@ def _departure_curve_locked(
         results = list(pool.map(one, rest)) if rest else []
     if first is not None:
         results.insert(0, first)
+    if cancel is not None and cancel.is_set():
+        raise SweepCancelled
     points = [point for point in results if point is not None]
 
     best_index = (
@@ -636,7 +738,16 @@ def _departure_curve_locked(
         if points
         else 0
     )
-    return DepartureCurveResponse(points=points, now_index=0, best_index=best_index)
+    response = DepartureCurveResponse(
+        points=points, now_index=0, best_index=best_index
+    )
+    if points:  # an all-failed sweep is likely transient; let it retry
+        with _DEPARTURE_CACHE_LOCK:
+            _DEPARTURE_CACHE[cache_key] = (time.monotonic(), response)
+            _DEPARTURE_CACHE.move_to_end(cache_key)
+            while len(_DEPARTURE_CACHE) > DEPARTURE_CACHE_MAX:
+                _DEPARTURE_CACHE.popitem(last=False)
+    return response
 
 
 @app.get("/api/weather", response_model=WeatherSnapshot)
@@ -704,9 +815,8 @@ def buildings(
         # encoding a partial parent payload that it must immediately discard.
         return {"buildings": [], "truncated": True}
 
-    heights = (
-        state.scene.building_bases_m[hits] + state.scene.building_heights_m[hits]
-    )
+    # base_m is ground elevation above sea level; "tallest" means height_m.
+    heights = state.scene.building_heights_m[hits]
     # A single city-scale JSON response briefly exists as Python objects, an
     # encoded body, and gzip input/output. Respect the caller's smaller limit
     # but clamp oversized/old-client requests so map furniture can never push a

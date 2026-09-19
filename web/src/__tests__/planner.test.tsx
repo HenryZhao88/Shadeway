@@ -243,6 +243,75 @@ describe('route planner', () => {
     expect(useStore.getState().pickMode).toBe('destination');
   });
 
+  function fix(latitude: number, longitude: number): GeolocationPosition {
+    return {
+      coords: {
+        accuracy: 11,
+        altitude: null,
+        altitudeAccuracy: null,
+        heading: null,
+        latitude,
+        longitude,
+        speed: null,
+        toJSON: () => ({}),
+      },
+      timestamp: Date.now(),
+      toJSON: () => ({}),
+    };
+  }
+
+  function positionError(code: number): GeolocationPositionError {
+    return {
+      code,
+      message: 'error',
+      PERMISSION_DENIED: 1,
+      POSITION_UNAVAILABLE: 2,
+      TIMEOUT: 3,
+    };
+  }
+
+  test('a timeout after a fix keeps tracking instead of abandoning the trip', async () => {
+    // watchPosition reports TIMEOUT whenever no NEW fix arrives in time, which
+    // is routine for someone standing still. That must not end the watch or
+    // pull the map into "choose your start" in the middle of a walk.
+    render(<Endpoints />);
+    await userEvent.click(screen.getByText('Use my current location'));
+    act(() => success(fix(40.755, -73.98)));
+    useStore.setState({
+      destination: { lat: 40.7527, lon: -73.9772, label: 'Grand Central' },
+      pickMode: 'none',
+    });
+    // the previous test's unmount clears its own watch after mocks reset
+    clearWatch.mockClear();
+
+    act(() => failure(positionError(3)));
+
+    expect(clearWatch).not.toHaveBeenCalled();
+    expect(useStore.getState().pickMode).toBe('none');
+    expect(useStore.getState().locationStatus).toBe('tracking');
+    expect(screen.queryByText(/could not find your location/i)).not.toBeInTheDocument();
+
+    act(() => success(fix(40.756, -73.981)));
+    expect(useStore.getState().currentLocation?.lat).toBe(40.756);
+  });
+
+  test('permission revoked after a fix stops the watch but leaves the map alone', async () => {
+    render(<Endpoints />);
+    await userEvent.click(screen.getByText('Use my current location'));
+    act(() => success(fix(40.755, -73.98)));
+    useStore.setState({
+      destination: { lat: 40.7527, lon: -73.9772, label: 'Grand Central' },
+      pickMode: 'none',
+    });
+    clearWatch.mockClear();
+
+    act(() => failure(positionError(1)));
+
+    expect(clearWatch).toHaveBeenCalledWith(17);
+    expect(useStore.getState().locationStatus).toBe('denied');
+    expect(useStore.getState().pickMode).toBe('none');
+  });
+
   test('falls back to choosing the start on the map when permission is denied', async () => {
     render(<Endpoints />);
     await userEvent.click(screen.getByText('Use my current location'));

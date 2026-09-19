@@ -60,6 +60,21 @@ def test_angular_weights_sum_to_one():
 
 # ------------------------------------------------------------------- physics
 
+def test_an_isothermal_enclosure_radiates_at_its_own_temperature():
+    """No sun, no sky, every surface at air temperature: the body sees a
+    uniform ~30 C black-ish box, so Tmrt must be ~30 C. The direction weights
+    have to sum to one across the six faces for this to hold — a doubled
+    up/down weight read 34.7 C here."""
+    enclosed = tmrt.tmrt_c(
+        _r(**{**NIGHT, "air_temp_c": 30.0, "cloud_cover_pct": 100.0}),
+        _s(f_sun=0.0, svf=0.0),
+    )
+    # surfaces emit at 0.95 (no reflected longwave in this model), so the box
+    # reads exactly 0.95^0.25 of its absolute temperature — never above it
+    expected = tmrt.SURFACE_EMISSIVITY**0.25 * (30.0 + tmrt.KELVIN) - tmrt.KELVIN
+    assert abs(enclosed - expected) < 0.05
+
+
 def test_full_sun_is_much_hotter_than_full_shade():
     sun = tmrt.tmrt_c(_r(), _s(f_sun=1.0, svf=0.8))
     shade = tmrt.tmrt_c(_r(), _s(f_sun=0.0, svf=0.8))

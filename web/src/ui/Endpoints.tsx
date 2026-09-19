@@ -142,6 +142,16 @@ export default function Endpoints() {
         });
       },
       (error) => {
+        const denied = error.code === error.PERMISSION_DENIED;
+        // Read the store, not this render's closure: the callback outlives
+        // the render that registered it, and that render had no fix yet.
+        const hadFix = useStore.getState().currentLocation !== null;
+        // Once we have a position, TIMEOUT and POSITION_UNAVAILABLE are
+        // routine — the watch reports them whenever no NEW fix arrives in time,
+        // e.g. while someone stands at a light. Keep the last fix and keep
+        // watching; the next good reading simply replaces it.
+        if (hadFix && !denied) return;
+
         // An error callback does not end the watch — the spec lets it keep
         // firing. Clearing the id without clearing the watch left it
         // registered for the life of the page, and put it beyond the reach of
@@ -150,14 +160,15 @@ export default function Endpoints() {
           navigator.geolocation.clearWatch(watchId.current);
         }
         watchId.current = null;
-        const denied = error.code === error.PERMISSION_DENIED;
         setLocationStatus(
           denied ? 'denied' : 'unavailable',
           denied
             ? 'Location is blocked so choose your start on the map'
             : 'We could not find your location so choose your start on the map',
         );
-        setPickMode('origin');
+        // Only ask for a start on the map if there is no start to keep. A
+        // permission revoked mid-trip leaves the last known origin in place.
+        if (!hadFix) setPickMode('origin');
       },
       { enableHighAccuracy: true, maximumAge: 10_000, timeout: 12_000 },
     );

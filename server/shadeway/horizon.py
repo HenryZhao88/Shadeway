@@ -27,7 +27,9 @@ AZIMUTH_BINS = 72
 BIN_WIDTH_DEG = 360.0 / AZIMUTH_BINS
 LAYER_OPAQUE = 0
 LAYER_CANOPY = 1
-CACHE_FORMAT_VERSION = 2
+# 3: opaque horizons use building height above local ground. Version 2 caches
+# added the ground's elevation above sea level to every roof and must re-warm.
+CACHE_FORMAT_VERSION = 3
 FINGERPRINT_FILES = ("samples.parquet", "buildings.parquet", "trees.parquet")
 
 
